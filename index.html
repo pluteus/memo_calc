@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>CalcPad</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
+:root {
+  --bg: #0f1117; --surface: #161b22; --border: #2a2f3a;
+  --text: #e6edf3; --dim: #5a6373;
+  --cyan: #39d0d8; --green: #7ee787; --magenta: #ff6eb4;
+  --yellow: #e3b341; --orange: #ff9500; --purple: #bc8cff;
+  --red: #f85149;
+  --font: 'JetBrains Mono','Fira Code','Courier New',monospace;
+  --lnum-color: #3d4451;
+  --result-bg: #0d1117;
+}
+:root.light {
+  --bg: #ffffff; --surface: #f3f4f6; --border: #d1d5db;
+  --text: #1f2328; --dim: #6e7781;
+  --cyan: #0969da; --green: #1a7f37; --magenta: #bf3989;
+  --yellow: #9a6700; --orange: #bc4c00; --purple: #6639ba;
+  --red: #d1242f;
+  --lnum-color: #b0b8c4;
+  --result-bg: #f6f8fa;
+}
+body {
+  background: var(--bg); color: var(--text);
+  font-family: var(--font); font-size: 14px;
+  height: 100dvh; display: flex; flex-direction: column; overflow: hidden;
+  /* ブラウザのピンチズームを無効化 */
+  touch-action: none;
+}
+#hdr {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; background: var(--surface);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+  touch-action: manipulation;
+}
+#hdr h1 { color: var(--cyan); font-size: 15px; letter-spacing: .06em; }
+.badge { font-size: 10px; border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--dim); }
+#hdr-right { margin-left: auto; display: flex; gap: 6px; }
+.hbtn {
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--dim); font-size: 12px; padding: 3px 10px;
+  cursor: pointer; font-family: var(--font); touch-action: manipulation;
+}
+.hbtn:hover { color: var(--cyan); border-color: var(--cyan); }
+
+#main { flex: 1; display: flex; overflow: hidden; position: relative; }
+
+/* Line numbers */
+#lnums {
+  width: 40px; background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow: hidden; flex-shrink: 0;
+  padding-top: 10px; user-select: none;
+}
+.lnum { text-align: right; padding-right: 8px; color: var(--lnum-color); }
+.lnum.cur { color: var(--cyan); }
+
+/* Editor */
+#editor-wrap { flex: 1; position: relative; overflow: hidden; min-width: 0; background: var(--bg); }
+#hl-canvas { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+#ta {
+  position: absolute; inset: 0;
+  background: transparent; color: transparent; caret-color: var(--cyan);
+  font-family: var(--font);
+  padding: 10px 8px;
+  border: none; outline: none; resize: none;
+  z-index: 2; white-space: pre;
+  overflow: auto;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  touch-action: pan-x pan-y;
+}
+
+/* Divider */
+#divider {
+  width: 6px; background: var(--border);
+  cursor: col-resize; flex-shrink: 0;
+  position: relative; z-index: 10;
+  transition: background 0.15s;
+  touch-action: none;
+}
+#divider:hover, #divider.dragging { background: var(--cyan); }
+#divider::after {
+  content: ''; position: absolute;
+  top: 50%; left: 50%; transform: translate(-50%,-50%);
+  width: 2px; height: 24px; border-radius: 2px;
+  background: rgba(255,255,255,0.2);
+}
+
+/* Results */
+#results {
+  border-left: none; overflow: hidden; background: var(--result-bg);
+  padding-top: 10px; flex-shrink: 0;
+}
+.rcell {
+  padding: 0 10px; text-align: right;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Footer */
+#footer {
+  display: flex; align-items: center; gap: 12px;
+  padding: 4px 14px; background: var(--surface);
+  border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--dim); flex-shrink: 0;
+  touch-action: manipulation;
+}
+#status-sum { color: var(--cyan); }
+#btn-fs.active { color: var(--cyan); border-color: var(--cyan); background: #0e2f33; }
+.lnum { cursor: pointer; }
+.lnum:hover { color: var(--cyan) !important; background: rgba(57,208,216,0.08); }
+
+/* Help */
+#help-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.72);
+  align-items: center; justify-content: center; z-index: 100;
+  touch-action: manipulation;
+}
+#help-overlay.open { display: flex; }
+#help-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 24px 28px;
+  max-width: 440px; width: 90%;
+  font-size: 13px; line-height: 1.8;
+}
+#help-box h2 { color: var(--cyan); font-size: 15px; margin-bottom: 12px; }
+.help-sec-title { color: var(--yellow); font-size: 11px; margin-top: 10px; margin-bottom: 3px; }
+.help-code {
+  display: inline-block; background: #0d1117; color: var(--green);
+  border-radius: 4px; padding: 1px 6px; margin: 2px 4px 2px 0; font-size: 12px;
+  font-family: var(--font);
+}
+#help-close {
+  margin-top: 16px; background: var(--cyan); color: #0f1117;
+  border: none; border-radius: 6px; padding: 6px 20px;
+  cursor: pointer; font-weight: 700; font-size: 13px; font-family: var(--font);
+  touch-action: manipulation;
+}
+</style>
+</head>
+<body>
+
+<div id="hdr">
+  <h1>CalcPad</h1>
+  <span class="badge">β</span>
+  <div id="hdr-right">
+    <button class="hbtn" id="btn-clear">クリア</button>
+    <button class="hbtn" id="btn-help">使い方</button>
+    <button class="hbtn" id="btn-theme" title="テーマ切替" style="padding:3px 8px;font-size:14px;line-height:1;">☀</button>
+    <button class="hbtn" id="btn-fs" title="フルスクリーン" style="padding:3px 8px;font-size:14px;line-height:1;">⛶</button>
+  </div>
+</div>
+
+<div id="main">
+  <div id="lnums"></div>
+  <div id="editor-wrap">
+    <canvas id="hl-canvas"></canvas>
+    <textarea id="ta" spellcheck="false" autocorrect="off" autocapitalize="off"></textarea>
+  </div>
+  <div id="divider"></div>
+  <div id="results"></div>
+</div>
+
+<div id="footer">
+  <span>合計: <span id="status-sum">—</span></span>
+  <span id="status-pos">行 1</span>
+</div>
+
+<div id="help-overlay">
+  <div id="help-box">
+    <h2>📐 CalcPad 使い方</h2>
+    <div class="help-sec-title">基本計算</div>
+    <span class="help-code">1 + 2</span><span class="help-code">100 * 0.8</span><span class="help-code">2 ^ 10</span><span class="help-code">15 % 4</span><span class="help-code">10%</span> → 0.1
+    <div class="help-sec-title">行参照</div>
+    <span class="help-code">S1</span><span class="help-code">S3</span> — その行の計算結果を参照
+    <div class="help-sec-title">関数</div>
+    <span class="help-code">sum(S1,S5)</span><span class="help-code">avg(S2,S4)</span><span class="help-code">sqrt(144)</span><span class="help-code">round(3.14,1)</span><span class="help-code">abs(-5)</span><span class="help-code">min(a,b)</span><span class="help-code">max(a,b)</span>
+    <div class="help-sec-title">コメント</div>
+    <span class="help-code"># これはコメント</span><span class="help-code">メモ書きもOK</span>
+    数字・演算子を含まない行は自動でコメント扱いになります
+    <div class="help-sec-title">ジェスチャー</div>
+    ピンチイン／アウト → 文字サイズ変更<br>
+    区切り線を左右ドラッグ → 幅調整
+    <br>
+    <button id="help-close">閉じる</button>
+  </div>
+</div>
+
+<script>
+const ta        = document.getElementById('ta');
+const canvas    = document.getElementById('hl-canvas');
+const ctx       = canvas.getContext('2d');
+const lnums     = document.getElementById('lnums');
+const resultsEl = document.getElementById('results');
+const statusSum = document.getElementById('status-sum');
+const statusPos = document.getElementById('status-pos');
+const divider   = document.getElementById('divider');
+
+/* ── 可変パラメータ ── */
+let fontSize    = 14;   // px
+let resultsW    = 130;  // px
+const MIN_FS    = 8;
+const MAX_FS    = 32;
+const PAD_TOP   = 10;
+const PAD_LEFT  = 8;
+
+function lineHeight() { return Math.round(fontSize * 2.1); }
+function fontStr()    { return `${fontSize}px "JetBrains Mono","Fira Code","Courier New",monospace`; }
+
+/* ── 色 ── */
+function getC() {
+  const s = getComputedStyle(document.documentElement);
+  const v = n => s.getPropertyValue(n).trim();
+  return {
+    comment: v('--dim'),  fn: v('--cyan'),   sref: v('--yellow'),
+    num:     v('--green'), op: v('--magenta'), paren: v('--purple'),
+    other:   v('--dim'),
+  };
+}
+
+/* ── トークナイザ ── */
+function getTokens(C) {
+  return [
+    { re:/^(sum|avg|sqrt|abs|round|min|max|floor|ceil|pi)\b/i, col:C.fn },
+    { re:/^(S\d+)\b/i,    col:C.sref },
+    { re:/^(\d+\.?\d*)/, col:C.num },
+    { re:/^([+\-*\/\^%])/,col:C.op },
+    { re:/^([()\[\]])/,  col:C.paren },
+    { re:/^(\s+)/,        col:null },
+    { re:/^(.)/,          col:C.other },
+  ];
+}
+
+function tokenize(line) {
+  const C = getC();
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith('#') || isCommentLike(trimmed))
+    return [{ text: line, col: C.comment }];
+  const toks = []; let rest = line;
+  for (const TOKENS = getTokens(C); rest.length;) {
+    let hit = false;
+    for (const { re, col } of TOKENS) {
+      const m = rest.match(re);
+      if (m) { toks.push({ text: m[0], col }); rest = rest.slice(m[0].length); hit = true; break; }
+    }
+    if (!hit) { toks.push({ text: rest[0], col: C.other }); rest = rest.slice(1); }
+  }
+  return toks;
+}
+
+/* ── Canvas ── */
+function resizeCanvas() {
+  const wrap = document.getElementById('editor-wrap');
+  canvas.width  = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
+}
+
+function drawHighlight(lines, scrollTop, scrollLeft) {
+  const LH = lineHeight();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.font = fontStr();
+  ctx.textBaseline = 'middle';
+  const start = Math.floor(scrollTop / LH);
+  const end   = Math.min(lines.length - 1, start + Math.ceil(canvas.height / LH) + 1);
+  for (let i = start; i <= end; i++) {
+    const y = PAD_TOP + i * LH + LH / 2 - scrollTop;
+    let x = PAD_LEFT - scrollLeft;
+    for (const tok of tokenize(lines[i])) {
+      if (tok.col) { ctx.fillStyle = tok.col; ctx.fillText(tok.text, x, y); }
+      x += ctx.measureText(tok.text).width;
+    }
+  }
+}
+
+/* ── 数式評価 ── */
+// 文字列のみの行（数式でない行）を判定する：演算子・関数・数字・S参照を含まない
+function isCommentLike(raw) {
+  // 全角文字（日本語・全角記号など）を含む行はコメント扱い
+  if (/[^\x00-\x7F]/.test(raw)) return true;
+  // 数字、演算子、関数名、S参照、カッコのいずれも含まなければコメント扱い
+  return !/[\d+\-*\/\^%()=]/.test(raw) &&
+    !/\b(sum|avg|sqrt|abs|round|min|max|floor|ceil|pi)\b/i.test(raw) &&
+    !/\bS\d+\b/i.test(raw);
+}
+
+function evaluate(lines) {
+  const res = [];
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i].trim();
+    // 空行・#コメント・文字列のみの行はすべてempty（コメント）扱い
+    if (!raw || raw.startsWith('#') || isCommentLike(raw)) { res.push({ type:'empty' }); continue; }
+    try {
+      // sum/avg を単体S参照展開より先に処理する
+      let expr = raw;
+      expr = expr.replace(/\bsum\(S(\d+),S(\d+)\)/gi,(_,a,b)=>{
+        const lo=Math.min(+a,+b)-1,hi=Math.max(+a,+b)-1; let s=0;
+        for(let j=lo;j<=hi;j++) if(res[j]?.type==='number') s+=res[j].value; return s;
+      });
+      expr = expr.replace(/\bavg\(S(\d+),S(\d+)\)/gi,(_,a,b)=>{
+        const lo=Math.min(+a,+b)-1,hi=Math.max(+a,+b)-1; let s=0,c=0;
+        for(let j=lo;j<=hi;j++) if(res[j]?.type==='number'){s+=res[j].value;c++;} return c?s/c:'NaN';
+      });
+      expr = expr.replace(/S(\d+)/gi, (_,n) => {
+        const r = res[+n-1]; return r?.type==='number' ? r.value : 'NaN';
+      });
+      expr = expr
+        .replace(/(\d+\.?\d*)%/g, '($1/100)')
+        .replace(/\^/g,'**').replace(/\bsqrt\b/g,'Math.sqrt').replace(/\babs\b/g,'Math.abs')
+        .replace(/\bmin\b/g,'Math.min').replace(/\bmax\b/g,'Math.max')
+        .replace(/\bfloor\b/g,'Math.floor').replace(/\bceil\b/g,'Math.ceil')
+        .replace(/\bpi\b/gi,'Math.PI')
+        .replace(/\bround\(([^,)]+),\s*(\d+)\)/g,(_,x,d)=>`(Math.round(${x}*1e${d})/1e${d})`)
+        .replace(/\bround\(([^)]+)\)/g,(_,x)=>`Math.round(${x})`);
+      const val = Function('"use strict";return('+expr+')')();
+      res.push(typeof val==='number'&&isFinite(val)?{type:'number',value:val}:{type:'empty'});
+    } catch { res.push({type:'error'}); }
+  }
+  return res;
+}
+
+function fmt(n) {
+  if (Math.abs(n)>=1e9||(n!==0&&Math.abs(n)<0.001)) return n.toExponential(4);
+  const s=parseFloat(n.toPrecision(12)).toString(), [a,b]=s.split('.');
+  return a.replace(/\B(?=(\d{3})+(?!\d))/g,','+(b?'.'+b:''));
+}
+// fix fmt: comma bug
+function fmtN(n) {
+  if (Math.abs(n)>=1e9||(n!==0&&Math.abs(n)<0.001)) return n.toExponential(4);
+  const s=parseFloat(n.toPrecision(12)).toString();
+  const parts=s.split('.');
+  parts[0]=parts[0].replace(/\B(?=(\d{3})+(?!\d))/g,',');
+  return parts.join('.');
+}
+
+/* ── UI更新 ── */
+let curLine = 0;
+
+function applyFontSize() {
+  const LH = lineHeight();
+  ta.style.fontSize    = fontSize + 'px';
+  ta.style.lineHeight  = LH + 'px';
+  // 行番号フォントサイズ
+  document.querySelectorAll('.lnum').forEach(el => {
+    el.style.height     = LH + 'px';
+    el.style.lineHeight = LH + 'px';
+    el.style.fontSize   = Math.max(9, fontSize - 3) + 'px';
+  });
+  // 結果列セルも更新
+  document.querySelectorAll('.rcell').forEach(el => {
+    el.style.height     = LH + 'px';
+    el.style.lineHeight = LH + 'px';
+    el.style.fontSize   = Math.max(9, fontSize - 1) + 'px';
+  });
+}
+
+function applyResultsWidth() {
+  resultsEl.style.width = resultsW + 'px';
+}
+
+function render() {
+  const lines = ta.value.split('\n');
+  const res   = evaluate(lines);
+  const LH    = lineHeight();
+
+  // テキストエリアのフォント・行高を常に同期（カーソルずれ防止）
+  ta.style.fontSize   = fontSize + 'px';
+  ta.style.lineHeight = LH + 'px';
+
+  // 行番号
+  lnums.innerHTML = lines.map((_,i) =>
+    `<div class="lnum${i===curLine?' cur':''}" data-line="${i+1}" style="height:${LH}px;line-height:${LH}px;font-size:${Math.max(9,fontSize-3)}px">${i+1}</div>`
+  ).join('');
+
+  // Canvas
+  resizeCanvas();
+  drawHighlight(lines, ta.scrollTop, ta.scrollLeft);
+
+  // 結果
+  resultsEl.innerHTML = res.map(r => {
+    const h = `height:${LH}px;line-height:${LH}px;font-size:${Math.max(9,fontSize-1)}px;`;
+    if (r.type==='number') return `<div class="rcell" style="${h}color:#7ee787">${fmtN(r.value)}</div>`;
+    if (r.type==='error')  return `<div class="rcell" style="${h}color:#f85149">ERR</div>`;
+    return `<div class="rcell" style="${h}color:transparent">·</div>`;
+  }).join('');
+
+  // 合計
+  const nums = res.filter(r=>r.type==='number').map(r=>r.value);
+  statusSum.textContent = nums.length ? fmtN(nums.reduce((a,b)=>a+b,0)) : '—';
+
+  syncScroll();
+}
+
+function syncScroll() {
+  const lines = ta.value.split('\n');
+  lnums.scrollTop     = ta.scrollTop;
+  resultsEl.scrollTop = ta.scrollTop;
+  drawHighlight(lines, ta.scrollTop, ta.scrollLeft);
+}
+
+function updateCursor() {
+  const pos = ta.selectionStart;
+  curLine = ta.value.substring(0, pos).split('\n').length - 1;
+  statusPos.textContent = `行 ${curLine+1}`;
+}
+
+/* ── ピンチズーム → 文字サイズ ── */
+let pinchStartDist = null;
+let pinchStartFS   = fontSize;
+
+document.addEventListener('touchstart', e => {
+  if (e.touches.length === 2) {
+    pinchStartDist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    pinchStartFS = fontSize;
+    e.preventDefault();
+  }
+}, { passive: false });
+
+document.addEventListener('touchmove', e => {
+  if (e.touches.length === 2 && pinchStartDist !== null) {
+    e.preventDefault();
+    const dist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    const ratio = dist / pinchStartDist;
+    fontSize = Math.min(MAX_FS, Math.max(MIN_FS, Math.round(pinchStartFS * ratio)));
+    render();
+  }
+}, { passive: false });
+
+document.addEventListener('touchend', e => {
+  if (e.touches.length < 2) pinchStartDist = null;
+}, { passive: true });
+
+/* ── 区切り線ドラッグ ── */
+let divDragging = false;
+let divStartX   = 0;
+let divStartW   = resultsW;
+
+function onDivMove(clientX) {
+  const mainRect = document.getElementById('main').getBoundingClientRect();
+  const newW = Math.min(
+    mainRect.width - 120,
+    Math.max(60, mainRect.right - clientX - 3)
+  );
+  resultsW = newW;
+  applyResultsWidth();
+  resizeCanvas();
+  render();
+}
+
+// Mouse
+divider.addEventListener('mousedown', e => {
+  divDragging = true;
+  divider.classList.add('dragging');
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+  e.preventDefault();
+});
+document.addEventListener('mousemove', e => {
+  if (divDragging) onDivMove(e.clientX);
+});
+document.addEventListener('mouseup', () => {
+  if (divDragging) {
+    divDragging = false;
+    divider.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+});
+
+// Touch
+divider.addEventListener('touchstart', e => {
+  divDragging = true;
+  divider.classList.add('dragging');
+  e.preventDefault();
+}, { passive: false });
+document.addEventListener('touchmove', e => {
+  if (divDragging && e.touches.length === 1) {
+    onDivMove(e.touches[0].clientX);
+    e.preventDefault();
+  }
+}, { passive: false });
+document.addEventListener('touchend', () => {
+  if (divDragging) { divDragging = false; divider.classList.remove('dragging'); }
+});
+
+/* ── その他イベント ── */
+ta.addEventListener('input',  () => { updateCursor(); render(); });
+ta.addEventListener('keyup',  () => { updateCursor(); render(); });
+ta.addEventListener('click',  () => { updateCursor(); render(); });
+ta.addEventListener('scroll', syncScroll);
+
+ta.addEventListener('keydown', e => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const s = ta.selectionStart, end = ta.selectionEnd;
+    ta.value = ta.value.substring(0,s) + '  ' + ta.value.substring(end);
+    ta.selectionStart = ta.selectionEnd = s + 2;
+    render();
+  }
+});
+
+window.addEventListener('resize', () => { resizeCanvas(); render(); });
+
+/* ── フルスクリーン ── */
+const btnFs = document.getElementById('btn-fs');
+function updateFsBtn() {
+  const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  btnFs.textContent = isFs ? '✕' : '⛶';
+  btnFs.title = isFs ? '全画面を終了' : 'フルスクリーン';
+  btnFs.classList.toggle('active', isFs);
+}
+btnFs.addEventListener('click', () => {
+  const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  if (!isFs) {
+    (document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen)
+      .call(document.documentElement);
+  } else {
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  }
+});
+document.addEventListener('fullscreenchange', updateFsBtn);
+document.addEventListener('webkitfullscreenchange', updateFsBtn);
+
+/* ── テーマ切替 ── */
+const btnTheme = document.getElementById('btn-theme');
+let isLight = false;
+function updateThemeBtn() {
+  btnTheme.textContent = isLight ? '🌙' : '☀';
+  btnTheme.title = isLight ? 'ダークモードへ' : 'ライトモードへ';
+}
+btnTheme.addEventListener('click', () => {
+  isLight = !isLight;
+  document.documentElement.classList.toggle('light', isLight);
+  updateThemeBtn();
+  render();
+});
+
+/* ── 行番号クリック／縦スワイプ ── */
+let lnumSwipeStart = null;  // { lineNo, y }
+let lnumSwiping    = false;
+let lnumHighlight  = null;  // { from, to } 強調表示中の範囲
+
+function insertAtCursor(text) {
+  const s = ta.selectionStart, end = ta.selectionEnd;
+  ta.value = ta.value.substring(0, s) + text + ta.value.substring(end);
+  ta.selectionStart = ta.selectionEnd = s + text.length;
+  ta.focus();
+  updateCursor();
+  render();
+}
+
+function lnumLineFromEvent(e) {
+  const el = e.target.closest('.lnum') ||
+    document.elementFromPoint(e.touches ? e.touches[0].clientX : e.clientX,
+                              e.touches ? e.touches[0].clientY : e.clientY)?.closest('.lnum');
+  if (!el) return null;
+  return parseInt(el.dataset.line);
+}
+
+// タッチ開始
+lnums.addEventListener('touchstart', e => {
+  const el = e.target.closest('.lnum');
+  if (!el) return;
+  const lineNo = parseInt(el.dataset.line);
+  if (isNaN(lineNo)) return;
+  lnumSwipeStart = { lineNo, y: e.touches[0].clientY };
+  lnumSwiping    = false;
+  lnumHighlight  = null;
+  e.preventDefault();
+}, { passive: false });
+
+// タッチ移動 → スワイプ判定＆ハイライト更新
+lnums.addEventListener('touchmove', e => {
+  if (!lnumSwipeStart) return;
+  const dy = Math.abs(e.touches[0].clientY - lnumSwipeStart.y);
+  if (dy > 6) lnumSwiping = true;
+  if (!lnumSwiping) return;
+  e.preventDefault();
+
+  const curY  = e.touches[0].clientY;
+  const el    = document.elementFromPoint(e.touches[0].clientX, curY)?.closest('.lnum');
+  const curNo = el ? parseInt(el.dataset.line) : lnumSwipeStart.lineNo;
+  lnumHighlight = {
+    from: Math.min(lnumSwipeStart.lineNo, curNo),
+    to:   Math.max(lnumSwipeStart.lineNo, curNo),
+  };
+  // スワイプ中のハイライト描画
+  document.querySelectorAll('.lnum').forEach(el => {
+    const n = parseInt(el.dataset.line);
+    if (n >= lnumHighlight.from && n <= lnumHighlight.to) {
+      el.style.color      = 'var(--cyan)';
+      el.style.background = 'rgba(57,208,216,0.15)';
+    } else {
+      el.style.color      = '';
+      el.style.background = '';
+    }
+  });
+}, { passive: false });
+
+// タッチ終了 → 挿入
+lnums.addEventListener('touchend', e => {
+  if (!lnumSwipeStart) return;
+  if (lnumSwiping && lnumHighlight) {
+    // スワイプ → sum() 挿入
+    insertAtCursor(`sum(S${lnumHighlight.from},S${lnumHighlight.to})`);
+  } else {
+    // タップ → S参照挿入（従来動作）
+    insertAtCursor(`S${lnumSwipeStart.lineNo}`);
+  }
+  // ハイライトリセット
+  document.querySelectorAll('.lnum').forEach(el => {
+    el.style.color = ''; el.style.background = '';
+  });
+  lnumSwipeStart = null;
+  lnumSwiping    = false;
+  lnumHighlight  = null;
+}, { passive: true });
+
+// マウスクリック（PC）
+lnums.addEventListener('click', e => {
+  const el = e.target.closest('.lnum');
+  if (!el) return;
+  const lineNo = parseInt(el.dataset.line);
+  if (isNaN(lineNo)) return;
+  insertAtCursor(`S${lineNo}`);
+});
+
+document.getElementById('btn-clear').addEventListener('click', () => {
+  if (confirm('内容をすべて消去しますか？')) { ta.value = ''; render(); }
+});
+document.getElementById('btn-help').addEventListener('click', () => {
+  document.getElementById('help-overlay').classList.add('open');
+});
+document.getElementById('help-close').addEventListener('click', () => {
+  document.getElementById('help-overlay').classList.remove('open');
+});
+document.getElementById('help-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+});
+
+/* ── 初期値 ── */
+ta.value = `# CalcPad へようこそ！
+# 計算式とメモを自由に書けます
+# 数字・演算子を含まない行はコメント扱いになります
+
+税抜き価格
+180000
+
+消費税（10%）
+180000 * 10%
+
+税込価格
+180000 * (1 + 10%)
+
+# 合計（7行目〜11行目）
+sum(S7,S11)
+`;
+
+applyResultsWidth();
+ta.style.fontSize   = fontSize + 'px';
+ta.style.lineHeight = lineHeight() + 'px';
+resizeCanvas();
+render();
+</script>
+</body>
+</html>
