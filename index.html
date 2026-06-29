@@ -493,8 +493,46 @@ document.addEventListener('touchend', () => {
   if (divDragging) { divDragging = false; divider.classList.remove('dragging'); }
 });
 
-/* ── その他イベント ── */
-ta.addEventListener('input',  () => { updateCursor(); render(); });
+/* ── S参照自動修正 ── */
+let prevLines = [];
+
+function fixSRefs(oldLines, newLines) {
+  const oldLen = oldLines.length;
+  const newLen = newLines.length;
+  if (oldLen === newLen) return; // 行数変化なし → 修正不要
+
+  const delta = newLen - oldLen; // 正=行追加、負=行削除
+
+  // 変化点：前後から共通部分を除いた最初の変化行
+  let changeAt = 0;
+  for (let i = 0; i < Math.min(oldLen, newLen); i++) {
+    if (oldLines[i] !== newLines[i]) { changeAt = i; break; }
+    changeAt = i + 1;
+  }
+  // 変化点の行自体が編集中の行（その行のS参照は触らない）
+  // 変化点より下の行のS参照番号をdeltaだけずらす
+  const cursorPos = ta.selectionStart;
+  const result = newLines.map((line, i) => {
+    if (i <= changeAt) return line;
+    return line.replace(/S(\d+)/gi, (match, n) => {
+      const num = parseInt(n);
+      return num > changeAt ? `S${num + delta}` : match;
+    });
+  });
+
+  const newText = result.join('\n');
+  if (newText === ta.value) return;
+  ta.value = newText;
+  ta.selectionStart = ta.selectionEnd = cursorPos;
+}
+
+ta.addEventListener('input', () => {
+  const newLines = ta.value.split('\n');
+  fixSRefs(prevLines, newLines);
+  prevLines = ta.value.split('\n');
+  updateCursor();
+  render();
+});
 ta.addEventListener('keyup',  () => { updateCursor(); render(); });
 ta.addEventListener('click',  () => { updateCursor(); render(); });
 ta.addEventListener('scroll', syncScroll);
@@ -555,6 +593,7 @@ function insertAtCursor(text) {
   ta.value = ta.value.substring(0, s) + text + ta.value.substring(end);
   ta.selectionStart = ta.selectionEnd = s + text.length;
   ta.focus();
+  prevLines = ta.value.split('\n');
   updateCursor();
   render();
 }
@@ -670,6 +709,7 @@ applyResultsWidth();
 ta.style.fontSize   = fontSize + 'px';
 ta.style.lineHeight = lineHeight() + 'px';
 resizeCanvas();
+prevLines = ta.value.split('\n');
 render();
 </script>
 </body>
