@@ -4,6 +4,21 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>CalcPad</title>
+<meta name="theme-color" content="#ffffff">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="CalcPad">
+<link rel="manifest" id="pwa-manifest">
+<link rel="icon" id="pwa-icon">
+<link rel="apple-touch-icon" id="pwa-apple-icon">
+<script>
+// FOUC防止：レンダリング前にテーマを適用
+(function(){
+  var t = localStorage.getItem('calcpad-theme') ?? 'light';
+  if (t === 'light') document.documentElement.classList.add('light');
+})();
+</script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
 :root {
@@ -15,6 +30,7 @@
   --font: 'JetBrains Mono','Fira Code','Courier New',monospace;
   --lnum-color: #3d4451;
   --result-bg: #0d1117;
+  --result-num: #7ee787;
 }
 :root.light {
   --bg: #ffffff; --surface: #f3f4f6; --border: #d1d5db;
@@ -24,6 +40,7 @@
   --red: #d1242f;
   --lnum-color: #b0b8c4;
   --result-bg: #f6f8fa;
+  --result-num: #0000FF;
 }
 body {
   background: var(--bg); color: var(--text);
@@ -111,6 +128,27 @@ body {
 }
 #status-sum { color: var(--cyan); }
 #btn-fs.active { color: var(--cyan); border-color: var(--cyan); background: #0e2f33; }
+#btn-numpad.active { color: var(--cyan); border-color: var(--cyan); }
+
+/* テンキー */
+#numpad {
+  display: none; flex-shrink: 0; background: var(--surface);
+  border-top: 1px solid var(--border);
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px; padding: 1px;
+  touch-action: manipulation;
+}
+#numpad.open { display: grid; }
+.npkey {
+  background: var(--bg); color: var(--text);
+  border: none; font-family: var(--font);
+  font-size: 18px; padding: 12px 0;
+  -webkit-user-select: none; user-select: none;
+}
+.npkey:active { background: var(--border); }
+.npkey.op     { color: var(--cyan); }
+.npkey.wide   { grid-column: span 2; }
+.npkey.accent { background: var(--cyan); color: #fff; font-weight: bold; }
 .lnum { cursor: pointer; }
 .lnum:hover { color: var(--cyan) !important; background: rgba(57,208,216,0.08); }
 
@@ -131,7 +169,7 @@ body {
 #help-box h2 { color: var(--cyan); font-size: 15px; margin-bottom: 12px; }
 .help-sec-title { color: var(--yellow); font-size: 11px; margin-top: 10px; margin-bottom: 3px; }
 .help-code {
-  display: inline-block; background: #0d1117; color: var(--green);
+  display: inline-block; background: var(--result-bg); color: var(--green);
   border-radius: 4px; padding: 1px 6px; margin: 2px 4px 2px 0; font-size: 12px;
   font-family: var(--font);
 }
@@ -169,6 +207,30 @@ body {
 <div id="footer">
   <span>合計: <span id="status-sum">—</span></span>
   <span id="status-pos">行 1</span>
+  <button class="hbtn" id="btn-numpad" title="テンキー切替" style="margin-left:auto;padding:2px 8px;font-size:12px;">🔢</button>
+</div>
+
+<div id="numpad">
+  <button class="npkey" data-k="7">7</button>
+  <button class="npkey" data-k="8">8</button>
+  <button class="npkey" data-k="9">9</button>
+  <button class="npkey op" data-k="/">/</button>
+  <button class="npkey" data-k="4">4</button>
+  <button class="npkey" data-k="5">5</button>
+  <button class="npkey" data-k="6">6</button>
+  <button class="npkey op" data-k="*">×</button>
+  <button class="npkey" data-k="1">1</button>
+  <button class="npkey" data-k="2">2</button>
+  <button class="npkey" data-k="3">3</button>
+  <button class="npkey op" data-k="-">−</button>
+  <button class="npkey" data-k="0">0</button>
+  <button class="npkey" data-k=".">.</button>
+  <button class="npkey" data-k="%">%</button>
+  <button class="npkey op" data-k="+">+</button>
+  <button class="npkey op" data-k="(">(</button>
+  <button class="npkey op" data-k=")">)</button>
+  <button class="npkey" data-k="bs">⌫</button>
+  <button class="npkey accent" data-k="enter">↵</button>
 </div>
 
 <div id="help-overlay">
@@ -383,8 +445,8 @@ function render() {
   // 結果
   resultsEl.innerHTML = res.map(r => {
     const h = `height:${LH}px;line-height:${LH}px;font-size:${Math.max(9,fontSize-1)}px;`;
-    if (r.type==='number') return `<div class="rcell" style="${h}color:#7ee787">${fmtN(r.value)}</div>`;
-    if (r.type==='error')  return `<div class="rcell" style="${h}color:#f85149">ERR</div>`;
+    if (r.type==='number') return `<div class="rcell" style="${h}color:var(--result-num)">${fmtN(r.value)}</div>`;
+    if (r.type==='error')  return `<div class="rcell" style="${h}color:var(--red)">ERR</div>`;
     return `<div class="rcell" style="${h}color:transparent">·</div>`;
   }).join('');
 
@@ -526,12 +588,19 @@ function fixSRefs(oldLines, newLines) {
   ta.selectionStart = ta.selectionEnd = cursorPos;
 }
 
+let saveTimer = null;
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => localStorage.setItem('calcpad-note', ta.value), 300);
+}
+
 ta.addEventListener('input', () => {
   const newLines = ta.value.split('\n');
   fixSRefs(prevLines, newLines);
   prevLines = ta.value.split('\n');
   updateCursor();
   render();
+  scheduleSave();
 });
 ta.addEventListener('keyup',  () => { updateCursor(); render(); });
 ta.addEventListener('click',  () => { updateCursor(); render(); });
@@ -571,7 +640,8 @@ document.addEventListener('webkitfullscreenchange', updateFsBtn);
 
 /* ── テーマ切替 ── */
 const btnTheme = document.getElementById('btn-theme');
-let isLight = false;
+let isLight = (localStorage.getItem('calcpad-theme') ?? 'light') === 'light';
+document.documentElement.classList.toggle('light', isLight);
 function updateThemeBtn() {
   btnTheme.textContent = isLight ? '🌙' : '☀';
   btnTheme.title = isLight ? 'ダークモードへ' : 'ライトモードへ';
@@ -579,9 +649,11 @@ function updateThemeBtn() {
 btnTheme.addEventListener('click', () => {
   isLight = !isLight;
   document.documentElement.classList.toggle('light', isLight);
+  localStorage.setItem('calcpad-theme', isLight ? 'light' : 'dark');
   updateThemeBtn();
   render();
 });
+updateThemeBtn();
 
 /* ── 行番号クリック／縦スワイプ ── */
 let lnumSwipeStart = null;  // { lineNo, y }
@@ -597,6 +669,58 @@ function insertAtCursor(text) {
   updateCursor();
   render();
 }
+
+/* ── テンキー ── */
+const btnNumpad = document.getElementById('btn-numpad');
+const numpad    = document.getElementById('numpad');
+let numpadOpen  = false;
+
+function setNumpadOpen(open) {
+  numpadOpen = open;
+  numpad.classList.toggle('open', open);
+  btnNumpad.classList.toggle('active', open);
+  if (open) {
+    // ソフトウェアキーボードだけ抑制し、カーソル移動・選択は維持する
+    ta.setAttribute('inputmode', 'none');
+  } else {
+    ta.removeAttribute('inputmode');
+  }
+  ta.focus();
+}
+
+btnNumpad.addEventListener('click', () => setNumpadOpen(!numpadOpen));
+
+function npApplyEdit(newValue, newCursorPos) {
+  const oldLines = ta.value.split('\n');
+  ta.value = newValue;
+  ta.selectionStart = ta.selectionEnd = newCursorPos;
+  const newLines = ta.value.split('\n');
+  fixSRefs(oldLines, newLines);
+  prevLines = ta.value.split('\n');
+  ta.focus();
+  updateCursor();
+  render();
+  scheduleSave();
+}
+
+numpad.addEventListener('click', e => {
+  const btn = e.target.closest('.npkey');
+  if (!btn) return;
+  const k = btn.dataset.k;
+  const s = ta.selectionStart, end = ta.selectionEnd;
+  const v = ta.value;
+
+  if (k === 'bs') {
+    if (s !== end) { npApplyEdit(v.slice(0,s) + v.slice(end), s); }
+    else if (s > 0) { npApplyEdit(v.slice(0,s-1) + v.slice(s), s-1); }
+    return;
+  }
+  if (k === 'enter') {
+    npApplyEdit(v.slice(0,s) + '\n' + v.slice(end), s+1);
+    return;
+  }
+  npApplyEdit(v.slice(0,s) + k + v.slice(end), s + k.length);
+});
 
 function lnumLineFromEvent(e) {
   const el = e.target.closest('.lnum') ||
@@ -675,7 +799,12 @@ lnums.addEventListener('click', e => {
 });
 
 document.getElementById('btn-clear').addEventListener('click', () => {
-  if (confirm('内容をすべて消去しますか？')) { ta.value = ''; render(); }
+  if (confirm('内容をすべて消去しますか？')) {
+    ta.value = '';
+    prevLines = [''];
+    render();
+    localStorage.setItem('calcpad-note', '');
+  }
 });
 document.getElementById('btn-help').addEventListener('click', () => {
   document.getElementById('help-overlay').classList.add('open');
@@ -687,8 +816,8 @@ document.getElementById('help-overlay').addEventListener('click', e => {
   if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
 });
 
-/* ── 初期値 ── */
-ta.value = `# CalcPad へようこそ！
+/* ── 初期値（localStorageから復元、なければサンプル） ── */
+const SAMPLE = `# CalcPad へようこそ！
 # 計算式とメモを自由に書けます
 # 数字・演算子を含まない行はコメント扱いになります
 
@@ -704,6 +833,7 @@ ta.value = `# CalcPad へようこそ！
 # 合計（7行目〜11行目）
 sum(S7,S11)
 `;
+ta.value = localStorage.getItem('calcpad-note') ?? SAMPLE;
 
 applyResultsWidth();
 ta.style.fontSize   = fontSize + 'px';
@@ -711,6 +841,57 @@ ta.style.lineHeight = lineHeight() + 'px';
 resizeCanvas();
 prevLines = ta.value.split('\n');
 render();
+
+// 確実に保存するための保険（debounceが間に合わない場合）
+window.addEventListener('beforeunload', () => localStorage.setItem('calcpad-note', ta.value));
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') localStorage.setItem('calcpad-note', ta.value);
+});
+
+/* ── PWA: manifest / icon / service worker をインライン生成 ── */
+(function setupPWA() {
+  const manifest = {
+    name: 'CalcPad', short_name: 'CalcPad',
+    start_url: './', scope: './', display: 'standalone',
+    background_color: '#ffffff', theme_color: '#ffffff',
+    icons: [
+      { src: iconDataUrl(192), sizes: '192x192', type: 'image/png' },
+      { src: iconDataUrl(512), sizes: '512x512', type: 'image/png' }
+    ]
+  };
+  function iconDataUrl(size) {
+    const c = document.createElement('canvas'); c.width = c.height = size;
+    const g = c.getContext('2d');
+    g.fillStyle = '#0969da'; g.fillRect(0,0,size,size);
+    g.fillStyle = '#ffffff'; g.font = `bold ${size*0.5}px monospace`;
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('Σ', size/2, size/2+size*0.05);
+    return c.toDataURL('image/png');
+  }
+  const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+  document.getElementById('pwa-manifest').href = URL.createObjectURL(blob);
+  document.getElementById('pwa-icon').href = iconDataUrl(192);
+  document.getElementById('pwa-apple-icon').href = iconDataUrl(192);
+
+  if ('serviceWorker' in navigator) {
+    const swCode = `
+      const CACHE = 'calcpad-v1';
+      self.addEventListener('install', e => { self.skipWaiting(); });
+      self.addEventListener('activate', e => { self.clients.claim(); });
+      self.addEventListener('fetch', e => {
+        e.respondWith(
+          caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
+            const copy = res.clone();
+            caches.open(CACHE).then(c => c.put(e.request, copy));
+            return res;
+          }).catch(() => cached))
+        );
+      });
+    `;
+    const swBlob = new Blob([swCode], { type: 'application/javascript' });
+    navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(() => {});
+  }
+})();
 </script>
 </body>
 </html>
