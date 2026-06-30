@@ -64,6 +64,8 @@ body {
   cursor: pointer; font-family: var(--font); touch-action: manipulation;
 }
 .hbtn:hover { color: var(--cyan); border-color: var(--cyan); }
+.hbtn:disabled { opacity: 0.3; cursor: default; }
+.hbtn:disabled:hover { color: var(--dim); border-color: var(--border); }
 
 #main { flex: 1; display: flex; overflow: hidden; position: relative; }
 
@@ -188,6 +190,8 @@ body {
   <button class="hbtn" id="btn-save" title="テキストファイルとして保存" style="padding:3px 8px;font-size:14px;line-height:1;">💾</button>
   <button class="hbtn" id="btn-load" title="テキストファイルを読み込み" style="padding:3px 8px;font-size:14px;line-height:1;">📂</button>
   <input type="file" id="file-load" accept=".txt,text/plain" style="display:none;">
+  <button class="hbtn" id="btn-undo" title="元に戻す" disabled style="padding:3px 8px;font-size:14px;line-height:1;">↶</button>
+  <button class="hbtn" id="btn-redo" title="やり直す" disabled style="padding:3px 8px;font-size:14px;line-height:1;">↷</button>
   <span class="badge">β</span>
   <div id="hdr-right">
     <button class="hbtn" id="btn-clear">クリア</button>
@@ -613,6 +617,74 @@ function scheduleSave() {
   saveTimer = setTimeout(() => localStorage.setItem('calcpad-note', ta.value), 300);
 }
 
+/* ── Undo / Redo 履歴管理 ── */
+const btnUndo = document.getElementById('btn-undo');
+const btnRedo = document.getElementById('btn-redo');
+let undoStack = [{ value: ta.value, sel: 0 }];
+let redoStack = [];
+let undoTimer = null;
+let isUndoRedoing = false;
+const UNDO_DEBOUNCE = 500; // ms：この間隔以上操作が止まったら1つの履歴として確定
+const UNDO_MAX = 200;
+
+function updateUndoRedoBtns() {
+  btnUndo.disabled = undoStack.length <= 1;
+  btnRedo.disabled = redoStack.length === 0;
+}
+
+function pushUndoSnapshot() {
+  const last = undoStack[undoStack.length - 1];
+  if (last && last.value === ta.value) return; // 変化なしなら積まない
+  undoStack.push({ value: ta.value, sel: ta.selectionStart });
+  if (undoStack.length > UNDO_MAX) undoStack.shift();
+  redoStack = [];
+  updateUndoRedoBtns();
+}
+
+// タイピング中は確定を遅らせ、一定の無操作 or 区切り文字で履歴を確定する
+function scheduleUndoSnapshot(immediate) {
+  if (isUndoRedoing) return;
+  clearTimeout(undoTimer);
+  if (immediate) { pushUndoSnapshot(); return; }
+  undoTimer = setTimeout(pushUndoSnapshot, UNDO_DEBOUNCE);
+}
+
+function applyHistoryState(state) {
+  isUndoRedoing = true;
+  ta.value = state.value;
+  ta.selectionStart = ta.selectionEnd = Math.min(state.sel, ta.value.length);
+  prevLines = ta.value.split('\n');
+  ta.focus();
+  updateCursor();
+  render();
+  scheduleSave();
+  updateUndoRedoBtns();
+  isUndoRedoing = false;
+}
+
+btnUndo.addEventListener('click', () => {
+  clearTimeout(undoTimer);
+  pushUndoSnapshot(); // 直前の未確定編集を確定してから戻す
+  if (undoStack.length <= 1) return;
+  redoStack.push(undoStack.pop());
+  applyHistoryState(undoStack[undoStack.length - 1]);
+});
+
+btnRedo.addEventListener('click', () => {
+  if (redoStack.length === 0) return;
+  const state = redoStack.pop();
+  undoStack.push(state);
+  applyHistoryState(state);
+});
+
+document.addEventListener('keydown', e => {
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); btnUndo.click(); }
+  if (mod && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase()==='z' && e.shiftKey))) { e.preventDefault(); btnRedo.click(); }
+});
+
+updateUndoRedoBtns();
+
 ta.addEventListener('input', () => {
   const newLines = ta.value.split('\n');
   fixSRefs(prevLines, newLines);
@@ -620,6 +692,7 @@ ta.addEventListener('input', () => {
   updateCursor();
   render();
   scheduleSave();
+  scheduleUndoSnapshot();
 });
 ta.addEventListener('keyup',  () => { updateCursor(); render(); });
 ta.addEventListener('click',  () => { updateCursor(); render(); });
@@ -632,6 +705,8 @@ ta.addEventListener('keydown', e => {
     ta.value = ta.value.substring(0,s) + '  ' + ta.value.substring(end);
     ta.selectionStart = ta.selectionEnd = s + 2;
     render();
+    scheduleSave();
+    scheduleUndoSnapshot();
   }
 });
 
@@ -699,6 +774,8 @@ function insertAtCursor(text) {
   prevLines = ta.value.split('\n');
   updateCursor();
   render();
+  scheduleSave();
+  scheduleUndoSnapshot(true);
 }
 
 /* ── テンキー ── */
@@ -748,6 +825,7 @@ function npApplyEdit(newValue, newCursorPos) {
   updateCursor();
   render();
   scheduleSave();
+  scheduleUndoSnapshot();
 }
 
 numpad.addEventListener('click', e => {
@@ -851,6 +929,7 @@ document.getElementById('btn-clear').addEventListener('click', () => {
     prevLines = [''];
     render();
     localStorage.setItem('calcpad-note', '');
+    scheduleUndoSnapshot(true);
   }
 });
 
@@ -882,6 +961,7 @@ fileLoadInput.addEventListener('change', () => {
       prevLines = ta.value.split('\n');
       render();
       localStorage.setItem('calcpad-note', ta.value);
+      scheduleUndoSnapshot(true);
     };
     reader.readAsText(file, 'UTF-8');
   };
@@ -917,6 +997,9 @@ const SAMPLE = `# memo_calc へようこそ！
 sum(S7,S11)
 `;
 ta.value = localStorage.getItem('calcpad-note') ?? SAMPLE;
+undoStack = [{ value: ta.value, sel: 0 }];
+redoStack = [];
+updateUndoRedoBtns();
 
 applyResultsWidth();
 ta.style.fontSize   = fontSize + 'px';
