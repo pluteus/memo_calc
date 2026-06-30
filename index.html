@@ -195,7 +195,7 @@ body {
   <span class="badge">β</span>
   <div id="hdr-right">
     <button class="hbtn" id="btn-clear">クリア</button>
-    <button class="hbtn" id="btn-help">使い方</button>
+    <button class="hbtn" id="btn-help">？</button>
     <button class="hbtn" id="btn-theme" title="テーマ切替" style="padding:3px 8px;font-size:14px;line-height:1;">☀</button>
     <button class="hbtn" id="btn-fs" title="フルスクリーン" style="padding:3px 8px;font-size:14px;line-height:1;">⛶</button>
   </div>
@@ -970,7 +970,7 @@ fileLoadInput.addEventListener('change', () => {
 });
 
 document.getElementById('btn-help').addEventListener('click', () => {
-  document.getElementById('help-overlay').classList.add('open');
+  window.location.href = 'about.html';
 });
 document.getElementById('help-close').addEventListener('click', () => {
   document.getElementById('help-overlay').classList.remove('open');
