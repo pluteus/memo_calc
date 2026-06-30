@@ -53,11 +53,16 @@ body {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 14px; background: var(--surface);
   border-bottom: 1px solid var(--border); flex-shrink: 0;
-  touch-action: manipulation;
+  touch-action: pan-x;
+  overflow-x: auto; overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+#hdr::-webkit-scrollbar { display: none; }
+#hdr h1, #hdr > .hbtn, #hdr > .badge, #hdr-right { flex-shrink: 0; }
 #hdr h1 { color: var(--cyan); font-size: 15px; letter-spacing: .06em; }
 .badge { font-size: 10px; border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--dim); }
-#hdr-right { margin-left: auto; display: flex; gap: 6px; }
+#hdr-right { display: flex; gap: 6px; }
 .hbtn {
   background: none; border: 1px solid var(--border); border-radius: 6px;
   color: var(--dim); font-size: 12px; padding: 3px 10px;
