@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>CalcPad</title>
+<title>memo_calc</title>
 <meta name="theme-color" content="#ffffff">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="CalcPad">
+<meta name="apple-mobile-web-app-title" content="memo_calc">
 <link rel="manifest" id="pwa-manifest">
 <link rel="icon" id="pwa-icon">
 <link rel="apple-touch-icon" id="pwa-apple-icon">
@@ -94,7 +94,7 @@ body {
 
 /* Divider */
 #divider {
-  width: 6px; background: var(--border);
+  width: 14px; background: var(--border);
   cursor: col-resize; flex-shrink: 0;
   position: relative; z-index: 10;
   transition: background 0.15s;
@@ -104,8 +104,8 @@ body {
 #divider::after {
   content: ''; position: absolute;
   top: 50%; left: 50%; transform: translate(-50%,-50%);
-  width: 2px; height: 24px; border-radius: 2px;
-  background: rgba(255,255,255,0.2);
+  width: 4px; height: 36px; border-radius: 3px;
+  background: rgba(255,255,255,0.25);
 }
 
 /* Results */
@@ -184,7 +184,10 @@ body {
 <body>
 
 <div id="hdr">
-  <h1>CalcPad</h1>
+  <h1>memo_calc</h1>
+  <button class="hbtn" id="btn-save" title="テキストファイルとして保存" style="padding:3px 8px;font-size:14px;line-height:1;">💾</button>
+  <button class="hbtn" id="btn-load" title="テキストファイルを読み込み" style="padding:3px 8px;font-size:14px;line-height:1;">📂</button>
+  <input type="file" id="file-load" accept=".txt,text/plain" style="display:none;">
   <span class="badge">β</span>
   <div id="hdr-right">
     <button class="hbtn" id="btn-clear">クリア</button>
@@ -207,7 +210,8 @@ body {
 <div id="footer">
   <span>合計: <span id="status-sum">—</span></span>
   <span id="status-pos">行 1</span>
-  <button class="hbtn" id="btn-numpad" title="テンキー切替" style="margin-left:auto;padding:2px 8px;font-size:12px;">🔢</button>
+  <button class="hbtn" id="btn-dispmode" title="表示形式切替" style="margin-left:auto;padding:2px 8px;font-size:12px;font-family:var(--font);min-width:48px;text-align:center;">小数</button>
+  <button class="hbtn" id="btn-numpad" title="テンキー切替" style="padding:2px 8px;font-size:12px;">🔢</button>
 </div>
 
 <div id="numpad">
@@ -235,7 +239,7 @@ body {
 
 <div id="help-overlay">
   <div id="help-box">
-    <h2>📐 CalcPad 使い方</h2>
+    <h2>📐 memo_calc 使い方</h2>
     <div class="help-sec-title">基本計算</div>
     <span class="help-code">1 + 2</span><span class="help-code">100 * 0.8</span><span class="help-code">2 ^ 10</span><span class="help-code">15 % 4</span><span class="help-code">10%</span> → 0.1
     <div class="help-sec-title">行参照</div>
@@ -391,7 +395,22 @@ function fmt(n) {
   return a.replace(/\B(?=(\d{3})+(?!\d))/g,','+(b?'.'+b:''));
 }
 // fix fmt: comma bug
+/* ── 表示形式（小数／繰り下げ／繰り上げ／四捨五入） ── */
+let displayMode = localStorage.getItem('calcpad-dispmode') || 'decimal';
+const DISP_MODES = ['decimal','floor','ceil','round'];
+const DISP_LABELS = { decimal:'小数', floor:'切捨', ceil:'切上', round:'四捨五入' };
+
+function applyDisplayMode(n) {
+  switch (displayMode) {
+    case 'floor': return Math.floor(n);
+    case 'ceil':  return Math.ceil(n);
+    case 'round': return Math.round(n);
+    default:      return n; // decimal
+  }
+}
+
 function fmtN(n) {
+  n = applyDisplayMode(n);
   if (Math.abs(n)>=1e9||(n!==0&&Math.abs(n)<0.001)) return n.toExponential(4);
   const s=parseFloat(n.toPrecision(12)).toString();
   const parts=s.split('.');
@@ -511,7 +530,7 @@ function onDivMove(clientX) {
   const mainRect = document.getElementById('main').getBoundingClientRect();
   const newW = Math.min(
     mainRect.width - 120,
-    Math.max(60, mainRect.right - clientX - 3)
+    Math.max(60, mainRect.right - clientX - 7)
   );
   resultsW = newW;
   applyResultsWidth();
@@ -620,6 +639,8 @@ window.addEventListener('resize', () => { resizeCanvas(); render(); });
 
 /* ── フルスクリーン ── */
 const btnFs = document.getElementById('btn-fs');
+let fsIntended = false; // ユーザーが明示的にフルスクリーンをONにした意図を保持
+
 function updateFsBtn() {
   const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
   btnFs.textContent = isFs ? '✕' : '⛶';
@@ -629,13 +650,23 @@ function updateFsBtn() {
 btnFs.addEventListener('click', () => {
   const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
   if (!isFs) {
+    fsIntended = true;
     (document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen)
       .call(document.documentElement);
   } else {
+    fsIntended = false;
     (document.exitFullscreen || document.webkitExitFullscreen).call(document);
   }
 });
-document.addEventListener('fullscreenchange', updateFsBtn);
+document.addEventListener('fullscreenchange', () => {
+  const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  // ユーザーがONにしたつもりなのに、ノートエリア操作などで意図せず解除された場合は再突入を試みる
+  if (fsIntended && !isFs) {
+    const req = document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen;
+    if (req) req.call(document.documentElement).catch(() => { fsIntended = false; });
+  }
+  updateFsBtn();
+});
 document.addEventListener('webkitfullscreenchange', updateFsBtn);
 
 /* ── テーマ切替 ── */
@@ -689,6 +720,22 @@ function setNumpadOpen(open) {
 }
 
 btnNumpad.addEventListener('click', () => setNumpadOpen(!numpadOpen));
+
+/* ── 表示形式切替ボタン ── */
+const btnDispMode = document.getElementById('btn-dispmode');
+const DISP_TITLES = { decimal:'小数（そのまま）', floor:'切り捨て', ceil:'切り上げ', round:'四捨五入' };
+function updateDispModeBtn() {
+  btnDispMode.textContent = DISP_LABELS[displayMode];
+  btnDispMode.title = '表示形式: ' + DISP_TITLES[displayMode] + '（タップで切替）';
+}
+btnDispMode.addEventListener('click', () => {
+  const idx = DISP_MODES.indexOf(displayMode);
+  displayMode = DISP_MODES[(idx + 1) % DISP_MODES.length];
+  localStorage.setItem('calcpad-dispmode', displayMode);
+  updateDispModeBtn();
+  render();
+});
+updateDispModeBtn();
 
 function npApplyEdit(newValue, newCursorPos) {
   const oldLines = ta.value.split('\n');
@@ -806,6 +853,42 @@ document.getElementById('btn-clear').addEventListener('click', () => {
     localStorage.setItem('calcpad-note', '');
   }
 });
+
+/* ── テキストファイル 保存／読み込み ── */
+document.getElementById('btn-save').addEventListener('click', () => {
+  const blob = new Blob([ta.value], { type: 'text/plain' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const ts   = new Date();
+  const pad  = n => String(n).padStart(2,'0');
+  const fname = `memo_calc_${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}_${pad(ts.getHours())}${pad(ts.getMinutes())}.txt`;
+  a.href = url; a.download = fname;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
+const fileLoadInput = document.getElementById('file-load');
+document.getElementById('btn-load').addEventListener('click', () => {
+  fileLoadInput.value = '';
+  fileLoadInput.click();
+});
+fileLoadInput.addEventListener('change', () => {
+  const file = fileLoadInput.files[0];
+  if (!file) return;
+  const apply = () => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      ta.value = reader.result;
+      prevLines = ta.value.split('\n');
+      render();
+      localStorage.setItem('calcpad-note', ta.value);
+    };
+    reader.readAsText(file, 'UTF-8');
+  };
+  if (ta.value.trim() && !confirm('現在の内容を読み込んだファイルで置き換えますか？')) return;
+  apply();
+});
+
 document.getElementById('btn-help').addEventListener('click', () => {
   document.getElementById('help-overlay').classList.add('open');
 });
@@ -817,7 +900,7 @@ document.getElementById('help-overlay').addEventListener('click', e => {
 });
 
 /* ── 初期値（localStorageから復元、なければサンプル） ── */
-const SAMPLE = `# CalcPad へようこそ！
+const SAMPLE = `# memo_calc へようこそ！
 # 計算式とメモを自由に書けます
 # 数字・演算子を含まない行はコメント扱いになります
 
@@ -851,7 +934,7 @@ document.addEventListener('visibilitychange', () => {
 /* ── PWA: manifest / icon / service worker をインライン生成 ── */
 (function setupPWA() {
   const manifest = {
-    name: 'CalcPad', short_name: 'CalcPad',
+    name: 'memo_calc', short_name: 'memo_calc',
     start_url: './', scope: './', display: 'standalone',
     background_color: '#ffffff', theme_color: '#ffffff',
     icons: [
