@@ -53,15 +53,20 @@ body {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 14px; background: var(--surface);
   border-bottom: 1px solid var(--border); flex-shrink: 0;
-  touch-action: manipulation;
+  touch-action: pan-x;
+  overflow-x: auto; overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
-#hdr h1 { color: var(--cyan); font-size: 15px; letter-spacing: .06em; }
-.badge { font-size: 10px; border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--dim); }
-#hdr-right { margin-left: auto; display: flex; gap: 6px; }
+#hdr::-webkit-scrollbar { display: none; }
+#hdr h1 { color: var(--cyan); font-size: 15px; letter-spacing: .06em; flex-shrink: 0; white-space: nowrap; }
+.badge { font-size: 10px; border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--dim); flex-shrink: 0; }
+#hdr-right { margin-left: auto; display: flex; gap: 6px; flex-shrink: 0; }
 .hbtn {
   background: none; border: 1px solid var(--border); border-radius: 6px;
   color: var(--dim); font-size: 12px; padding: 3px 10px;
   cursor: pointer; font-family: var(--font); touch-action: manipulation;
+  flex-shrink: 0; white-space: nowrap;
 }
 .hbtn:hover { color: var(--cyan); border-color: var(--cyan); }
 .hbtn:disabled { opacity: 0.3; cursor: default; }
@@ -281,16 +286,16 @@ body {
     <button class="qkey" data-k="0">0</button>
   </div>
   <div class="qw-row">
-    <button class="qkey" data-k="+">+</button>
-    <button class="qkey" data-k="-">-</button>
-    <button class="qkey" data-k="*">*</button>
-    <button class="qkey" data-k="/">/</button>
-    <button class="qkey" data-k="(">(</button>
-    <button class="qkey" data-k=")">)</button>
-    <button class="qkey" data-k=".">.</button>
-    <button class="qkey" data-k=",">,</button>
-    <button class="qkey" data-k="%">%</button>
-    <button class="qkey" data-k="#">#</button>
+    <button class="qkey sym" data-k="+" data-shift-k="=">+</button>
+    <button class="qkey sym" data-k="-" data-shift-k="_">-</button>
+    <button class="qkey sym" data-k="*" data-shift-k="^">*</button>
+    <button class="qkey sym" data-k="/" data-shift-k="\">/</button>
+    <button class="qkey sym" data-k="(" data-shift-k="[">(</button>
+    <button class="qkey sym" data-k=")" data-shift-k="]">)</button>
+    <button class="qkey sym" data-k="." data-shift-k=":">.</button>
+    <button class="qkey sym" data-k="," data-shift-k=";">,</button>
+    <button class="qkey sym" data-k="%" data-shift-k="&">%</button>
+    <button class="qkey sym" data-k="#" data-shift-k="@">#</button>
   </div>
   <div class="qw-row">
     <button class="qkey" data-k="q">q</button>
@@ -893,7 +898,11 @@ function setQwShift(on) {
   qwShift = on;
   qwerty.querySelectorAll('.qkey[data-k]:not([data-k="shift"])').forEach(btn => {
     const k = btn.dataset.k;
-    if (/^[a-z]$/.test(k)) btn.textContent = on ? k.toUpperCase() : k;
+    if (/^[a-z]$/.test(k)) {
+      btn.textContent = on ? k.toUpperCase() : k;
+    } else if (btn.dataset.shiftK) {
+      btn.textContent = on ? btn.dataset.shiftK : k;
+    }
   });
   const shiftBtn = qwerty.querySelector('[data-k="shift"]');
   shiftBtn.classList.toggle('shift-on', on && !capsLock);
@@ -1051,7 +1060,10 @@ qwerty.addEventListener('click', e => {
   if (k === 'arrow-up')    { qwMoveCursor('up');    return; }
   if (k === 'arrow-down')  { qwMoveCursor('down');  return; }
 
-  const ch = (qwShift && /^[a-z]$/.test(k)) ? k.toUpperCase() : k;
+  let ch;
+  if (/^[a-z]$/.test(k)) ch = qwShift ? k.toUpperCase() : k;
+  else if (qwShift && btn.dataset.shiftK) ch = btn.dataset.shiftK;
+  else ch = k;
   npApplyEdit(v.slice(0,s) + ch + v.slice(end), s + ch.length);
   if (qwShift && !capsLock) setQwShift(false); // 1文字ごとに解除（CapsLock中は維持）
 });
