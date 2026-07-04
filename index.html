@@ -9,9 +9,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="memo_calc">
-<link rel="manifest" id="pwa-manifest">
-<link rel="icon" id="pwa-icon">
-<link rel="apple-touch-icon" id="pwa-apple-icon">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <script>
 // FOUC防止：レンダリング前にテーマを適用
 (function(){
@@ -53,16 +53,11 @@ body {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 14px; background: var(--surface);
   border-bottom: 1px solid var(--border); flex-shrink: 0;
-  touch-action: pan-x;
-  overflow-x: auto; overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  touch-action: manipulation;
 }
-#hdr::-webkit-scrollbar { display: none; }
-#hdr h1, #hdr > .hbtn, #hdr > .badge, #hdr-right { flex-shrink: 0; }
 #hdr h1 { color: var(--cyan); font-size: 15px; letter-spacing: .06em; }
 .badge { font-size: 10px; border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--dim); }
-#hdr-right { display: flex; gap: 6px; }
+#hdr-right { margin-left: auto; display: flex; gap: 6px; }
 .hbtn {
   background: none; border: 1px solid var(--border); border-radius: 6px;
   color: var(--dim); font-size: 12px; padding: 3px 10px;
@@ -200,7 +195,7 @@ body {
   <span class="badge">β</span>
   <div id="hdr-right">
     <button class="hbtn" id="btn-clear">クリア</button>
-    <button class="hbtn" id="btn-help">？</button>
+    <button class="hbtn" id="btn-help">使い方</button>
     <button class="hbtn" id="btn-theme" title="テーマ切替" style="padding:3px 8px;font-size:14px;line-height:1;">☀</button>
     <button class="hbtn" id="btn-fs" title="フルスクリーン" style="padding:3px 8px;font-size:14px;line-height:1;">⛶</button>
   </div>
@@ -975,7 +970,7 @@ fileLoadInput.addEventListener('change', () => {
 });
 
 document.getElementById('btn-help').addEventListener('click', () => {
-  window.location.href = 'about.html';
+  document.getElementById('help-overlay').classList.add('open');
 });
 document.getElementById('help-close').addEventListener('click', () => {
   document.getElementById('help-overlay').classList.remove('open');
@@ -1019,50 +1014,12 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') localStorage.setItem('calcpad-note', ta.value);
 });
 
-/* ── PWA: manifest / icon / service worker をインライン生成 ── */
-(function setupPWA() {
-  const manifest = {
-    name: 'memo_calc', short_name: 'memo_calc',
-    start_url: './', scope: './', display: 'standalone',
-    background_color: '#ffffff', theme_color: '#ffffff',
-    icons: [
-      { src: iconDataUrl(192), sizes: '192x192', type: 'image/png' },
-      { src: iconDataUrl(512), sizes: '512x512', type: 'image/png' }
-    ]
-  };
-  function iconDataUrl(size) {
-    const c = document.createElement('canvas'); c.width = c.height = size;
-    const g = c.getContext('2d');
-    g.fillStyle = '#0969da'; g.fillRect(0,0,size,size);
-    g.fillStyle = '#ffffff'; g.font = `bold ${size*0.5}px monospace`;
-    g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText('Σ', size/2, size/2+size*0.05);
-    return c.toDataURL('image/png');
-  }
-  const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
-  document.getElementById('pwa-manifest').href = URL.createObjectURL(blob);
-  document.getElementById('pwa-icon').href = iconDataUrl(192);
-  document.getElementById('pwa-apple-icon').href = iconDataUrl(192);
-
-  if ('serviceWorker' in navigator) {
-    const swCode = `
-      const CACHE = 'calcpad-v1';
-      self.addEventListener('install', e => { self.skipWaiting(); });
-      self.addEventListener('activate', e => { self.clients.claim(); });
-      self.addEventListener('fetch', e => {
-        e.respondWith(
-          caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
-            const copy = res.clone();
-            caches.open(CACHE).then(c => c.put(e.request, copy));
-            return res;
-          }).catch(() => cached))
-        );
-      });
-    `;
-    const swBlob = new Blob([swCode], { type: 'application/javascript' });
-    navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(() => {});
-  }
-})();
+/* ── PWA: service worker登録（sw.js / manifest.json は同じフォルダの実ファイル） ── */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
