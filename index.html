@@ -408,10 +408,16 @@ function getTokens(C) {
 
 function tokenize(line) {
   const C = getC();
-  const trimmed = line.trim();
-  if (!trimmed || trimmed.startsWith('#') || isCommentLike(trimmed))
+  // 最初の # 以降はインラインコメントとして分離する
+  const hashIdx     = line.indexOf('#');
+  const codePart    = hashIdx === -1 ? line : line.slice(0, hashIdx);
+  const commentPart = hashIdx === -1 ? ''   : line.slice(hashIdx);
+  const trimmedCode = codePart.trim();
+
+  if (!trimmedCode || isCommentLike(trimmedCode))
     return [{ text: line, col: C.comment }];
-  const toks = []; let rest = line;
+
+  const toks = []; let rest = codePart;
   for (const TOKENS = getTokens(C); rest.length;) {
     let hit = false;
     for (const { re, col } of TOKENS) {
@@ -420,6 +426,7 @@ function tokenize(line) {
     }
     if (!hit) { toks.push({ text: rest[0], col: C.other }); rest = rest.slice(1); }
   }
+  if (commentPart) toks.push({ text: commentPart, col: C.comment });
   return toks;
 }
 
@@ -461,9 +468,12 @@ function isCommentLike(raw) {
 function evaluate(lines) {
   const res = [];
   for (let i = 0; i < lines.length; i++) {
-    const raw = lines[i].trim();
+    // 最初の # 以降はコメントなので式の評価対象から除外する
+    const line = lines[i];
+    const hashIdx = line.indexOf('#');
+    const raw = (hashIdx === -1 ? line : line.slice(0, hashIdx)).trim();
     // 空行・#コメント・文字列のみの行はすべてempty（コメント）扱い
-    if (!raw || raw.startsWith('#') || isCommentLike(raw)) { res.push({ type:'empty' }); continue; }
+    if (!raw || isCommentLike(raw)) { res.push({ type:'empty' }); continue; }
     try {
       // sum/avg を単体S参照展開より先に処理する
       let expr = raw;
@@ -625,10 +635,15 @@ document.addEventListener('touchend', e => {
   if (e.touches.length < 2) pinchStartDist = null;
 }, { passive: true });
 
-/* ── 区切り線ドラッグ ── */
+/* ── 区切り線ドラッグ：横スワイプ＝幅調整、縦スワイプ＝文字サイズ調整 ── */
 let divDragging = false;
+let divMode     = null;   // 'h'(幅) | 'v'(文字サイズ) ／ 移動量から最初に判定してロック
 let divStartX   = 0;
-let divStartW   = resultsW;
+let divStartY   = 0;
+let divStartFS  = fontSize;
+
+const DIV_LOCK_THRESHOLD = 6;   // px。方向確定に必要な最小移動量
+const DIV_FS_SENSITIVITY = 8;   // pxドラッグ / 1段階のフォントサイズ変化
 
 function onDivMove(clientX) {
   const mainRect = document.getElementById('main').getBoundingClientRect();
@@ -642,41 +657,68 @@ function onDivMove(clientX) {
   render();
 }
 
+function onDivFontSize(clientY) {
+  const deltaY = divStartY - clientY; // 上スワイプで拡大
+  fontSize = Math.min(MAX_FS, Math.max(MIN_FS, Math.round(divStartFS + deltaY / DIV_FS_SENSITIVITY)));
+  render();
+}
+
+function startDivDrag(clientX, clientY) {
+  divDragging = true;
+  divMode     = null;
+  divStartX   = clientX;
+  divStartY   = clientY;
+  divStartFS  = fontSize;
+  divider.classList.add('dragging');
+}
+
+function moveDivDrag(clientX, clientY) {
+  if (!divDragging) return;
+  if (divMode === null) {
+    const dx = Math.abs(clientX - divStartX);
+    const dy = Math.abs(clientY - divStartY);
+    if (Math.max(dx, dy) < DIV_LOCK_THRESHOLD) return; // まだ方向未確定
+    divMode = dx > dy ? 'h' : 'v';
+  }
+  if (divMode === 'h') onDivMove(clientX);
+  else onDivFontSize(clientY);
+}
+
+function endDivDrag() {
+  if (divDragging) {
+    divDragging = false;
+    divMode = null;
+    divider.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+}
+
 // Mouse
 divider.addEventListener('mousedown', e => {
-  divDragging = true;
-  divider.classList.add('dragging');
+  startDivDrag(e.clientX, e.clientY);
   document.body.style.cursor = 'col-resize';
   document.body.style.userSelect = 'none';
   e.preventDefault();
 });
 document.addEventListener('mousemove', e => {
-  if (divDragging) onDivMove(e.clientX);
+  if (divDragging) moveDivDrag(e.clientX, e.clientY);
 });
-document.addEventListener('mouseup', () => {
-  if (divDragging) {
-    divDragging = false;
-    divider.classList.remove('dragging');
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-  }
-});
+document.addEventListener('mouseup', endDivDrag);
 
 // Touch
 divider.addEventListener('touchstart', e => {
-  divDragging = true;
-  divider.classList.add('dragging');
+  const t = e.touches[0];
+  startDivDrag(t.clientX, t.clientY);
   e.preventDefault();
 }, { passive: false });
 document.addEventListener('touchmove', e => {
   if (divDragging && e.touches.length === 1) {
-    onDivMove(e.touches[0].clientX);
+    moveDivDrag(e.touches[0].clientX, e.touches[0].clientY);
     e.preventDefault();
   }
 }, { passive: false });
-document.addEventListener('touchend', () => {
-  if (divDragging) { divDragging = false; divider.classList.remove('dragging'); }
-});
+document.addEventListener('touchend', endDivDrag);
 
 /* ── S参照自動修正 ── */
 let prevLines = [];
