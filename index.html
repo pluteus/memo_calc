@@ -156,6 +156,7 @@ body {
 .npkey.op     { color: var(--cyan); }
 .npkey.wide   { grid-column: span 2; }
 .npkey.accent { background: var(--cyan); color: #fff; font-weight: bold; }
+.npkey.arrow  { color: var(--cyan); }
 
 /* 矢印付きQWERTY英字キーボード */
 #qwerty {
@@ -270,6 +271,10 @@ body {
   <button class="npkey op" data-k=")">)</button>
   <button class="npkey" data-k="bs">⌫</button>
   <button class="npkey accent" data-k="enter">↵</button>
+  <button class="npkey arrow" data-k="arrow-left">←</button>
+  <button class="npkey arrow" data-k="arrow-up">↑</button>
+  <button class="npkey arrow" data-k="arrow-down">↓</button>
+  <button class="npkey arrow" data-k="arrow-right">→</button>
 </div>
 
 <div id="qwerty">
@@ -1040,6 +1045,10 @@ numpad.addEventListener('click', e => {
     npApplyEdit(v.slice(0,s) + '\n' + v.slice(end), s+1);
     return;
   }
+  if (k === 'arrow-left')  { qwMoveCursor('left');  return; }
+  if (k === 'arrow-right') { qwMoveCursor('right'); return; }
+  if (k === 'arrow-up')    { qwMoveCursor('up');    return; }
+  if (k === 'arrow-down')  { qwMoveCursor('down');  return; }
   npApplyEdit(v.slice(0,s) + k + v.slice(end), s + k.length);
 });
 
