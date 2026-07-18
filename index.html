@@ -596,11 +596,10 @@ function render() {
   syncScroll();
 }
 
-// 小数表示モード以外（切捨／切上／四捨五入）で、結果セルの整数部が省略表示（…）になっている場合、
-// 画面左側にはみ出ない範囲で結果欄を左方向へ広げ、省略が解除されるようにする。
+// 結果セルの整数部が省略表示（…）になっている場合、画面左側にはみ出ない範囲で
+// 結果欄を左方向へ広げ、省略が解除されるようにする（表示モードによらず全モード共通）。
 // （広げるだけで、不要になっても自動では縮めない）
 function avoidResultTruncation() {
-  if (displayMode === 'decimal') return;
   if (divDragging) return;
 
   let maxNeeded = 0;
