@@ -883,6 +883,19 @@ ta.addEventListener('keydown', e => {
 
 window.addEventListener('resize', () => { resizeCanvas(); render(); });
 
+// 画面回転直後は resize イベントの時点でまだレイアウト（#main の実幅など）が
+// 確定していない端末があるため、少し遅延して再計算し、省略表示の解除漏れを防ぐ。
+window.addEventListener('orientationchange', () => {
+  setTimeout(() => { resizeCanvas(); render(); }, 50);
+  setTimeout(() => { resizeCanvas(); render(); }, 300);
+});
+if (screen.orientation && screen.orientation.addEventListener) {
+  screen.orientation.addEventListener('change', () => {
+    setTimeout(() => { resizeCanvas(); render(); }, 50);
+    setTimeout(() => { resizeCanvas(); render(); }, 300);
+  });
+}
+
 /* ── フルスクリーン ── */
 const btnFs = document.getElementById('btn-fs');
 let fsIntended = false; // ユーザーが明示的にフルスクリーンをONにした意図を保持
