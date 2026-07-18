@@ -581,9 +581,10 @@ function render() {
   drawHighlight(lines, ta.scrollTop, ta.scrollLeft);
 
   // 結果
-  resultsEl.innerHTML = res.map(r => {
+  const resTexts = res.map(r => r.type==='number' ? fmtN(r.value) : (r.type==='error' ? 'ERR' : '·'));
+  resultsEl.innerHTML = res.map((r,i) => {
     const h = `height:${LH}px;line-height:${LH}px;font-size:${Math.max(9,fontSize-1)}px;`;
-    if (r.type==='number') return `<div class="rcell" style="${h}color:var(--result-num)">${fmtN(r.value)}</div>`;
+    if (r.type==='number') return `<div class="rcell" style="${h}color:var(--result-num)">${resTexts[i]}</div>`;
     if (r.type==='error')  return `<div class="rcell" style="${h}color:var(--red)">ERR</div>`;
     return `<div class="rcell" style="${h}color:transparent">·</div>`;
   }).join('');
@@ -592,27 +593,33 @@ function render() {
   const nums = res.filter(r=>r.type==='number').map(r=>r.value);
   statusSum.textContent = nums.length ? fmtN(nums.reduce((a,b)=>a+b,0)) : '—';
 
-  avoidResultTruncation();
+  avoidResultTruncation(res, resTexts);
   syncScroll();
 }
 
 // 結果セルの整数部が省略表示（…）になっている場合、画面左側にはみ出ない範囲で
 // 結果欄を左方向へ広げ、省略が解除されるようにする（表示モードによらず全モード共通）。
+// 判定は el.scrollWidth ではなく canvas 上のテキスト計測で行う。
+// （右寄せ・nowrapセルは scrollWidth が環境によって当てにならないことがあり、
+// 　特に桁数の多い小数モードの数値で検出漏れが起きていたため）
 // （広げるだけで、不要になっても自動では縮めない）
-function avoidResultTruncation() {
+function avoidResultTruncation(res, resTexts) {
   if (divDragging) return;
+  if (!res || !res.length) return;
 
-  let maxNeeded = 0;
-  resultsEl.querySelectorAll('.rcell').forEach(el => {
-    if (el.scrollWidth > el.clientWidth + 1) {
-      maxNeeded = Math.max(maxNeeded, el.scrollWidth);
-    }
-  });
-  if (maxNeeded <= 0) return;
+  ctx.font = `${Math.max(9,fontSize-1)}px "JetBrains Mono","Fira Code","Courier New",monospace`;
+  let maxTextW = 0;
+  for (let i = 0; i < res.length; i++) {
+    if (res[i].type !== 'number' && res[i].type !== 'error') continue;
+    const w = ctx.measureText(resTexts[i]).width;
+    if (w > maxTextW) maxTextW = w;
+  }
+  const needed = Math.ceil(maxTextW) + 22; // 左右padding(10px×2)+安全マージン
+  if (needed <= resultsW) return;
 
   const mainRect = document.getElementById('main').getBoundingClientRect();
   const maxW = Math.max(60, mainRect.width - 120); // 手動ドラッグ時の上限と同じ（左側の余白を確保）
-  const newW = Math.min(maxW, Math.max(resultsW, maxNeeded + 4));
+  const newW = Math.min(maxW, needed);
   if (newW > resultsW) {
     resultsW = newW;
     applyResultsWidth();
