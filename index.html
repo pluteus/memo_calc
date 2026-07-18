@@ -727,6 +727,7 @@ function endDivDrag() {
     divider.classList.remove('dragging');
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
+    render(); // ドラッグ中は自動拡張チェックを止めていたため、離した直後に再チェックする
   }
 }
 
