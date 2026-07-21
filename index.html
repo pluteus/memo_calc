@@ -67,10 +67,21 @@ body {
   color: var(--dim); font-size: 12px; padding: 3px 10px;
   cursor: pointer; font-family: var(--font); touch-action: manipulation;
   flex-shrink: 0; white-space: nowrap;
+  height: 26px; box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center;
 }
 .hbtn:hover { color: var(--cyan); border-color: var(--cyan); }
 .hbtn:disabled { opacity: 0.3; cursor: default; }
 .hbtn:disabled:hover { color: var(--dim); border-color: var(--border); }
+
+/* ダークテーマでは絵文字/記号系アイコンが常に黒っぽく描画され見えにくいため反転させる */
+:root:not(.light) #btn-undo,
+:root:not(.light) #btn-redo,
+:root:not(.light) #btn-select-all,
+:root:not(.light) #btn-fs {
+  filter: invert(1);
+}
+:root:not(.light) #btn-fs.active { filter: none; }
 
 #main { flex: 1; display: flex; overflow: hidden; position: relative; }
 
@@ -224,7 +235,7 @@ body {
   <input type="file" id="file-load" accept=".txt,text/plain" style="display:none;">
   <button class="hbtn" id="btn-undo" title="元に戻す" disabled style="padding:3px 8px;font-size:14px;line-height:1;">↶</button>
   <button class="hbtn" id="btn-redo" title="やり直す" disabled style="padding:3px 8px;font-size:14px;line-height:1;">↷</button>
-  <span class="badge">β</span>
+  <button class="hbtn" id="btn-select-all" title="ノートを全選択" style="padding:3px 8px;font-size:12px;line-height:1;">全</button>
   <div id="hdr-right">
     <button class="hbtn" id="btn-clear">クリア</button>
     <button class="hbtn" id="btn-help">使い方</button>
@@ -1238,6 +1249,11 @@ lnums.addEventListener('click', e => {
   const lineNo = parseInt(el.dataset.line);
   if (isNaN(lineNo)) return;
   insertAtCursor(`S${lineNo}`);
+});
+
+document.getElementById('btn-select-all').addEventListener('click', () => {
+  ta.focus();
+  ta.select();
 });
 
 document.getElementById('btn-clear').addEventListener('click', () => {
