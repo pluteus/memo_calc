@@ -204,6 +204,7 @@ body {
 
 <div id="hdr">
   <h1>memo_calc</h1>
+  <button class="hbtn" id="btn-share" title="ノートを共有（Google Keepなど）" style="padding:3px 8px;font-size:14px;line-height:1;">📤</button>
   <button class="hbtn" id="btn-save" title="テキストファイルとして保存" style="padding:3px 8px;font-size:14px;line-height:1;">💾</button>
   <button class="hbtn" id="btn-load" title="テキストファイルを読み込み" style="padding:3px 8px;font-size:14px;line-height:1;">📂</button>
   <input type="file" id="file-load" accept=".txt,text/plain" style="display:none;">
@@ -1221,6 +1222,27 @@ document.getElementById('btn-clear').addEventListener('click', () => {
 });
 
 /* ── テキストファイル 保存／読み込み ── */
+document.getElementById('btn-share').addEventListener('click', async () => {
+  // 行番号がずれないよう、ノートの内容(ta.value)はそのまま共有する（先頭に注釈などは付けない）
+  const text = ta.value;
+  if (navigator.share) {
+    try {
+      await navigator.share({ text });
+    } catch (err) {
+      // ユーザーがキャンセルした場合などは何もしない
+    }
+  } else if (navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(text);
+      alert('この端末では共有機能が使えないため、ノートの内容をクリップボードにコピーしました。');
+    } catch (err) {
+      alert('共有に失敗しました。');
+    }
+  } else {
+    alert('この端末・ブラウザでは共有機能を利用できません。');
+  }
+});
+
 document.getElementById('btn-save').addEventListener('click', () => {
   const blob = new Blob([ta.value], { type: 'text/plain' });
   const url  = URL.createObjectURL(blob);
