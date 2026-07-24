@@ -1054,7 +1054,7 @@ btnNumpad.addEventListener('click', () => {
   const idx = KB_MODES.indexOf(kbMode);
   setKbMode(KB_MODES[(idx + 1) % KB_MODES.length]);
 });
-setKbMode('normal');
+setKbMode('numpad');
 
 /* ── 表示形式切替ボタン ── */
 const btnDispMode = document.getElementById('btn-dispmode');
