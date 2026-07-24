@@ -1,507 +1,827 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="ja" id="html-root">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>memo_calc — 書きながら計算するノート</title>
+<title>memo_calc — 書けば、右に答えが出るメモ帳</title>
+<meta name="description" content="memo_calcは、文章の中に数式を混ぜて書けるメモ帳ウェブアプリです。数字や式を含む行だけが自動で計算され、右側にリアルタイムで結果が表示されます。行番号参照（S1など）や sum/avg などの関数にも対応。インストール不要・オフライン対応のPWAです。">
+<meta name="keywords" content="memo_calc, 計算メモ, 計算式メモ帳, 電卓メモ, 計算ノート, テキスト電卓, PWA電卓, ブラウザ電卓, S参照, sum avg 関数, オフライン電卓, スマホ電卓メモ">
+<meta name="author" content="pluteus">
+<meta name="robots" content="index, follow">
+
+<!-- SNS（OGP） -->
+<meta property="og:title" content="memo_calc — 書けば、右に答えが出るメモ帳">
+<meta property="og:description" content="文章の中に数式を混ぜて書けるメモ帳。数式の行だけが自動で計算され、右側にリアルタイムで答えが並びます。インストール不要・オフライン対応。">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ja_JP">
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="memo_calc — 書けば、右に答えが出るメモ帳">
+<meta name="twitter:description" content="計算式を混ぜて書けるメモ帳。S参照やsum/avgなどの関数にも対応。インストール不要・オフライン対応のPWA。">
+
+<!-- PWA / Web App -->
+<meta name="theme-color" content="#0f1117">
+<link rel="manifest" href="manifest.json">
+
+<!-- 構造化データ（Google向け） -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "memo_calc",
+  "alternateName": ["計算メモ", "計算式メモ帳", "電卓メモ", "Calc Notepad"],
+  "description": "文章の中に数式を混ぜて書けるメモ帳ウェブアプリ。数式を含む行だけが自動で計算され、右側にリアルタイムで結果が表示される。行番号参照やsum/avgなどの関数にも対応。インストール不要・オフライン対応。",
+  "applicationCategory": "Utility",
+  "operatingSystem": "Web",
+  "inLanguage": "ja",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "JPY" },
+  "author": { "@type": "Person", "name": "pluteus" }
+}
+</script>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;500;600;700&family=Spectral:ital@1&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+
 <style>
-  :root{
-    --ink:#1f2328;
-    --ink-dim:#6b6457;
-    --paper:#fbfaf7;
-    --rule:#d8d3c8;
-    --rule-strong:#b9b2a0;
-    --calc-blue:#0000ff;
-    --mark:#2a6f4a;
-    --surface:#f1efe8;
-    --surface-deep:#e8e4d8;
-    --spine-w:44px;
-    --font-display:'Spectral', serif;
-    --font-body:'Inter', sans-serif;
-    --font-mono:'JetBrains Mono', monospace;
+  /* ===== トークン（アプリ本体のカラーパレットをそのまま踏襲） ===== */
+  :root {
+    --bg:      #0f1117;
+    --surface: #161b22;
+    --surface2:#1b2028;
+    --border:  #2a2f3a;
+    --text:    #e6edf3;
+    --dim:     #8892a0;
+    --cyan:    #39d0d8;
+    --green:   #7ee787;
+    --magenta: #ff6eb4;
+    --yellow:  #e3b341;
+    --purple:  #bc8cff;
+    --mono: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    --sans: 'Noto Sans JP', sans-serif;
   }
-  *{box-sizing:border-box;margin:0;padding:0;}
-  html{scroll-behavior:smooth;}
-  body{
-    background:var(--paper);
-    color:var(--ink);
-    font-family:var(--font-body);
-    line-height:1.6;
-    overflow-x:hidden;
-  }
-  @media (prefers-reduced-motion: reduce){
-    *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important;}
-  }
-
-  /* ───────── 紙のスパイン（左端の罫線帯） ───────── */
-  .spine{
-    position:fixed; top:0; left:0; bottom:0; width:var(--spine-w);
-    background:
-      repeating-linear-gradient(to bottom,
-        transparent 0, transparent 31px,
-        var(--rule) 31px, var(--rule) 32px);
-    border-right:1px solid var(--rule-strong);
-    z-index:1;
-  }
-  .spine::after{
-    content:'';
-    position:absolute; top:0; bottom:0; left:14px;
-    width:1px; background:#c98a8a;
-    opacity:.55;
-  }
-  @media (max-width:720px){ .spine{ display:none; } }
-
-  .page{ position:relative; z-index:2; }
-  @media (min-width:721px){
-    .page{ margin-left:var(--spine-w); }
+  :root.light {
+    --bg:      #ffffff;
+    --surface: #f3f4f6;
+    --surface2:#eceef1;
+    --border:  #d1d5db;
+    --text:    #1f2328;
+    --dim:     #6e7781;
+    --cyan:    #0969da;
+    --green:   #1a7f37;
+    --magenta: #bf3989;
+    --yellow:  #9a6700;
+    --purple:  #6639ba;
   }
 
-  .wrap{ max-width:760px; margin:0 auto; padding:0 28px; }
+  /* ===== リセット ===== */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; scroll-behavior: smooth; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.8;
+    transition: background 0.2s, color 0.2s;
+  }
+  a { color: var(--cyan); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, .mono { font-family: var(--mono); }
 
-  /* ───────── ヘッダー ───────── */
-  header.site{
-    display:flex; align-items:center; justify-content:space-between;
-    padding:22px 28px; max-width:760px; margin:0 auto;
-    border-bottom:1px solid var(--rule);
-  }
-  .brand{
-    font-family:var(--font-mono); font-weight:600; font-size:15px;
-    letter-spacing:.02em; display:flex; align-items:center; gap:8px;
-  }
-  .brand .dot{ color:var(--calc-blue); }
-  .nav-cta{
-    font-family:var(--font-mono); font-size:12.5px;
-    color:var(--ink); text-decoration:none;
-    border:1px solid var(--rule-strong); border-radius:5px;
-    padding:6px 12px; transition:border-color .15s,color .15s;
-  }
-  .nav-cta:hover{ border-color:var(--calc-blue); color:var(--calc-blue); }
-
-  /* ───────── HERO ───────── */
-  .hero{ padding:64px 0 40px; }
-  .eyebrow{
-    font-family:var(--font-mono); font-size:12px; letter-spacing:.08em;
-    color:var(--ink-dim); text-transform:uppercase; margin-bottom:18px;
-    display:flex; align-items:center; gap:10px;
-  }
-  .eyebrow::before{
-    content:''; width:18px; height:1px; background:var(--rule-strong);
-  }
-  h1{
-    font-family:var(--font-display); font-weight:600;
-    font-size:clamp(34px,6vw,52px); line-height:1.12;
-    letter-spacing:-.01em; max-width:14ch;
-  }
-  h1 em{
-    font-style:italic; font-weight:500; color:var(--calc-blue);
-  }
-  .lede{
-    font-size:17px; color:var(--ink-dim); max-width:46ch; margin-top:20px;
-  }
-  .hero-ctas{ display:flex; gap:12px; margin-top:30px; flex-wrap:wrap; }
-  .btn{
-    font-family:var(--font-mono); font-size:13px;
-    padding:11px 20px; border-radius:6px; text-decoration:none;
-    display:inline-flex; align-items:center; gap:8px;
-    transition:transform .15s, box-shadow .15s;
-  }
-  .btn-primary{
-    background:var(--ink); color:var(--paper);
-  }
-  .btn-primary:hover{ transform:translateY(-1px); box-shadow:0 4px 0 var(--rule-strong); }
-  .btn-ghost{
-    border:1px solid var(--rule-strong); color:var(--ink);
-  }
-  .btn-ghost:hover{ border-color:var(--ink); }
-
-  /* ───────── ライブ電卓ノートのレプリカ（シグネチャ要素） ───────── */
-  .replica{
-    margin-top:52px;
-    border:1px solid var(--rule-strong);
-    border-radius:10px;
-    overflow:hidden;
-    background:#13161d;
-    box-shadow:0 24px 60px -28px rgba(31,35,40,.35);
-  }
-  .replica-bar{
-    display:flex; align-items:center; gap:7px;
-    padding:10px 14px; background:#1a1e27;
-    border-bottom:1px solid #2a2f3a;
-  }
-  .replica-bar i{
-    width:9px; height:9px; border-radius:50%; background:#3a3f4c;
-  }
-  .replica-bar span{
-    margin-left:8px; font-family:var(--font-mono); font-size:11px; color:#6b7280;
-  }
-  .replica-body{
-    display:grid; grid-template-columns:1fr auto;
-    font-family:var(--font-mono); font-size:14.5px;
-    min-height:168px;
-  }
-  .replica-note{
-    padding:18px 18px; color:#cdd3db; white-space:pre; line-height:2.05;
-    border-right:1px solid #2a2f3a;
-  }
-  .replica-note .cm{ color:#5a6373; }
-  .replica-note .nm{ color:#7ee787; }
-  .replica-note .op{ color:#ff6eb4; }
-  .replica-results{
-    padding:18px 16px; color:var(--calc-blue);
-    background:#0d0f15; line-height:2.05; text-align:right;
-    min-width:108px; white-space:pre;
-  }
-  .caret{
-    display:inline-block; width:7px; height:1.1em; background:#7ee787;
-    vertical-align:text-bottom; animation:blink 1s step-end infinite;
-  }
-  @keyframes blink{ 50%{ opacity:0; } }
-
-  /* ───────── 「帳簿」スタイルの2カラム・セクション ───────── */
-  section{ padding:54px 0; border-bottom:1px solid var(--rule); }
-  section:last-of-type{ border-bottom:none; }
-  .sec-head{
-    display:grid; grid-template-columns:140px 1fr; gap:24px; margin-bottom:30px;
-  }
-  .sec-label{
-    font-family:var(--font-mono); font-size:12px; color:var(--ink-dim);
-    letter-spacing:.04em; padding-top:6px;
-  }
-  .sec-title{
-    font-family:var(--font-display); font-size:26px; font-weight:600;
-    line-height:1.25;
-  }
-  @media (max-width:560px){
-    .sec-head{ grid-template-columns:1fr; gap:8px; }
+  /* ===== ドットグリッド背景（罫線ではなく端末的なテクスチャ） ===== */
+  .dot-bg {
+    background-image: radial-gradient(var(--border) 1px, transparent 1px);
+    background-size: 18px 18px;
   }
 
-  /* features ledger rows */
-  .ledger{ display:flex; flex-direction:column; }
-  .ledger-row{
-    display:grid; grid-template-columns:140px 1fr; gap:24px;
-    padding:20px 0; border-top:1px solid var(--rule);
+  /* ===== テーマ切替ボタン ===== */
+  #theme-switcher {
+    position: fixed;
+    top: 12px;
+    right: 16px;
+    z-index: 9999;
   }
-  .ledger-row:first-child{ border-top:1px solid var(--rule); }
-  @media (max-width:560px){
-    .ledger-row{ grid-template-columns:1fr; gap:6px; }
+  #theme-btn {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #fff;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
   }
-  .ledger-key{
-    font-family:var(--font-mono); font-size:13px; color:var(--calc-blue);
-    padding-top:2px;
+  #theme-btn:hover { background: rgba(255,255,255,0.18); }
+
+  /* ===== ヘッダー ===== */
+  header {
+    background: var(--surface);
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
   }
-  .ledger-val h3{
-    font-family:var(--font-body); font-weight:600; font-size:16.5px; margin-bottom:6px;
+  .header-inner {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 64px 24px 48px;
+    position: relative;
+    z-index: 1;
   }
-  .ledger-val p{ color:var(--ink-dim); font-size:14.5px; max-width:50ch; }
-  .ledger-val code{
-    font-family:var(--font-mono); background:var(--surface);
-    border:1px solid var(--rule); border-radius:4px;
-    padding:1px 6px; font-size:13px; color:var(--ink);
+  .header-eyebrow {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    color: var(--cyan);
+    margin-bottom: 20px;
+    text-transform: uppercase;
+  }
+  h1 {
+    font-family: var(--mono);
+    font-size: clamp(1.8rem, 5.5vw, 3.1rem);
+    font-weight: 700;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+    margin-bottom: 20px;
+  }
+  h1 em {
+    font-style: normal;
+    color: var(--cyan);
+  }
+  .header-desc {
+    font-size: 1.02rem;
+    color: var(--dim);
+    max-width: 560px;
+    line-height: 1.9;
+    margin-bottom: 36px;
+  }
+  .header-cta {
+    display: inline-block;
+    background: var(--cyan);
+    color: #04222a;
+    font-family: var(--mono);
+    font-size: 0.95rem;
+    font-weight: 700;
+    padding: 14px 32px;
+    border-radius: 4px;
+    transition: opacity 0.2s;
+  }
+  .header-cta:hover { opacity: 0.85; text-decoration: none; }
+
+  /* ===== ナビ ===== */
+  nav {
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .nav-inner {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 24px;
+    display: flex;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .nav-inner a {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    color: var(--dim);
+    padding: 14px 16px;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .nav-inner a:hover {
+    color: var(--cyan);
+    border-bottom-color: var(--cyan);
+    text-decoration: none;
   }
 
-  /* example card */
-  .example{
-    margin-top:8px;
-    border:1px solid var(--rule-strong); border-radius:8px;
-    overflow:hidden; background:var(--surface);
+  /* ===== セクション共通 ===== */
+  section { padding: 72px 24px; }
+  .section-inner { max-width: 900px; margin: 0 auto; }
+  .section-label {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 12px;
   }
-  .example-grid{
-    display:grid; grid-template-columns:1fr auto;
-    font-family:var(--font-mono); font-size:13.5px;
+  h2 {
+    font-family: var(--mono);
+    font-size: clamp(1.4rem, 3.6vw, 2rem);
+    font-weight: 700;
+    line-height: 1.4;
+    margin-bottom: 20px;
   }
-  .example-note{
-    padding:16px; white-space:pre; line-height:1.9; color:var(--ink);
-    border-right:1px solid var(--rule);
-  }
-  .example-note .cm{ color:var(--ink-dim); font-style:italic; }
-  .example-results{
-    padding:16px 14px; text-align:right; line-height:1.9;
-    color:var(--calc-blue); background:var(--surface-deep);
-    min-width:96px; white-space:pre;
+  .section-lead {
+    font-size: 1.02rem;
+    color: var(--dim);
+    max-width: 640px;
+    margin-bottom: 48px;
   }
 
-  /* workflow steps (genuine sequence -> numbering justified) */
-  .steps{ display:flex; flex-direction:column; gap:0; }
-  .step{
-    display:grid; grid-template-columns:48px 1fr; gap:20px;
-    padding:18px 0; border-top:1px solid var(--rule);
-    position:relative;
+  /* ===== 概要（アプリ画面のCSSモックアップ） ===== */
+  #overview { background: var(--bg); }
+  .overview-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 40px;
+    align-items: center;
   }
-  .step:first-child{ border-top:1px solid var(--rule); }
-  .step-num{
-    font-family:var(--font-display); font-style:italic; font-size:22px;
-    color:var(--rule-strong);
+  @media (max-width: 720px) {
+    .overview-grid { grid-template-columns: 1fr; }
   }
-  .step h3{ font-size:15.5px; font-weight:600; margin-bottom:4px; }
-  .step p{ color:var(--ink-dim); font-size:14px; max-width:48ch; }
+  .app-mockup {
+    background: #0f1117;
+    border: 1px solid #2a2f3a;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+    font-family: var(--mono);
+    font-size: 0.82rem;
+  }
+  .mockup-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #161b22;
+    border-bottom: 1px solid #2a2f3a;
+  }
+  .mockup-dot { width: 9px; height: 9px; border-radius: 50%; background: #3a4150; }
+  .mockup-title { margin-left: 8px; color: #5a6373; font-size: 0.75rem; }
+  .mockup-body { display: flex; }
+  .mockup-lnums {
+    width: 26px;
+    background: #161b22;
+    color: #3d4451;
+    text-align: right;
+    padding: 10px 6px 10px 0;
+    border-right: 1px solid #2a2f3a;
+    flex-shrink: 0;
+  }
+  .mockup-lnums div { height: 26px; line-height: 26px; }
+  .mockup-lnums div.cur { color: #39d0d8; }
+  .mockup-notes {
+    flex: 1;
+    padding: 10px 10px;
+    min-width: 0;
+    color: #e6edf3;
+  }
+  .mockup-notes div { height: 26px; line-height: 26px; white-space: nowrap; overflow: hidden; }
+  .mockup-notes .c-num  { color: #7ee787; }
+  .mockup-notes .c-sref { color: #e3b341; }
+  .mockup-notes .c-op   { color: #ff6eb4; }
+  .mockup-notes .c-com  { color: #5a6373; }
+  .mockup-divider { width: 4px; background: #2a2f3a; }
+  .mockup-results {
+    width: 96px;
+    background: #0d1117;
+    padding: 10px 10px 10px 0;
+    text-align: right;
+    flex-shrink: 0;
+    color: #7ee787;
+  }
+  .mockup-results div { height: 26px; line-height: 26px; }
+  .mockup-footer {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: #161b22;
+    border-top: 1px solid #2a2f3a;
+    font-size: 0.7rem;
+    color: #5a6373;
+  }
+  .mockup-footer .sum { color: #39d0d8; }
 
-  /* footer */
-  footer{
-    padding:48px 0 80px;
+  .overview-text h3 {
+    font-family: var(--mono);
+    font-size: 1.2rem;
+    margin-bottom: 12px;
   }
-  .footer-cta{
-    border:1px solid var(--rule-strong); border-radius:10px;
-    padding:36px 30px; text-align:center;
-    background:var(--surface);
+  .overview-text p { color: var(--dim); margin-bottom: 16px; }
+
+  /* ===== 機能 ===== */
+  #features { background: var(--surface); }
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
   }
-  .footer-cta h2{
-    font-family:var(--font-display); font-size:24px; font-weight:600; margin-bottom:10px;
+  .feature-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 24px 22px;
+    position: relative;
   }
-  .footer-cta p{ color:var(--ink-dim); font-size:14.5px; margin-bottom:22px; }
-  .footer-meta{
-    margin-top:36px; display:flex; justify-content:space-between;
-    flex-wrap:wrap; gap:10px;
-    font-family:var(--font-mono); font-size:11.5px; color:var(--ink-dim);
+  .feature-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--cyan);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.3s;
+    border-radius: 6px 6px 0 0;
   }
+  .feature-card:hover::before { transform: scaleX(1); }
+  .feature-icon { font-size: 1.7rem; margin-bottom: 12px; line-height: 1; }
+  .feature-card h3 { font-family: var(--mono); font-size: 1rem; margin-bottom: 10px; }
+  .feature-card p { font-size: 0.88rem; color: var(--dim); line-height: 1.75; }
+
+  /* ===== 使い方 ===== */
+  #howto { background: var(--bg); }
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 32px;
+    counter-reset: step;
+  }
+  .step {
+    counter-increment: step;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    position: relative;
+  }
+  .step::before {
+    content: counter(step, decimal-leading-zero);
+    font-family: var(--mono);
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--border);
+    display: block;
+    margin-bottom: 10px;
+    line-height: 1;
+  }
+  .step h3 { font-size: 0.94rem; font-weight: 700; margin-bottom: 8px; }
+  .step p { font-size: 0.86rem; color: var(--dim); line-height: 1.75; }
+
+  /* ===== 対応環境 ===== */
+  #environments { background: var(--surface); }
+  .env-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 16px;
+  }
+  .env-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 22px 18px;
+  }
+  .env-icon { font-size: 1.6rem; margin-bottom: 10px; }
+  .env-card h3 { font-size: 0.92rem; margin-bottom: 6px; }
+  .env-card p { font-size: 0.84rem; color: var(--dim); line-height: 1.7; }
+
+  /* ===== FAQ ===== */
+  #faq { background: var(--bg); }
+  .faq-list { max-width: 680px; }
+  details { border-bottom: 1px solid var(--border); padding: 18px 0; }
+  summary {
+    font-weight: 700;
+    font-size: 0.95rem;
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::after {
+    content: '+';
+    font-family: var(--mono);
+    font-size: 1.3rem;
+    font-weight: 300;
+    color: var(--cyan);
+    flex-shrink: 0;
+    transition: transform 0.2s;
+  }
+  details[open] summary::after { transform: rotate(45deg); }
+  .faq-ans { font-size: 0.9rem; color: var(--dim); line-height: 1.85; margin-top: 12px; }
+
+  /* ===== CTA ===== */
+  #cta { background: var(--surface); text-align: center; }
+  .cta-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 56px 32px;
+    position: relative;
+    overflow: hidden;
+  }
+  .cta-box h2 { margin-bottom: 14px; }
+  .cta-box p { color: var(--dim); margin-bottom: 28px; font-size: 0.98rem; }
+
+  /* ===== フッター ===== */
+  footer {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 26px 24px;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    color: var(--dim);
+  }
+
+  /* ===== アクセス（アイコン + タイトル） ===== */
+  #access-hero {
+    background: var(--surface2);
+    padding: 40px 24px;
+    border-bottom: 3px solid var(--cyan);
+  }
+  .access-inner {
+    max-width: 900px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    flex-wrap: wrap;
+  }
+  .access-icon { width: 72px; height: 72px; flex-shrink: 0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+  .access-icon svg { width: 72px; height: 72px; display: block; }
+  .access-text h2 { font-family: var(--mono); font-size: 1.2rem; margin-bottom: 4px; }
+  .access-text p { color: var(--dim); font-size: 0.88rem; }
 </style>
 </head>
 <body>
 
-<div class="spine" aria-hidden="true"></div>
-
-<div class="page">
-
-  <header class="site">
-    <div class="brand"><span class="dot">Σ</span> memo_calc</div>
-    <a class="nav-cta" href="#start">アプリを開く →</a>
-  </header>
-
-  <main class="wrap">
-
-    <section class="hero">
-      <p class="eyebrow">plain-text notebook · auto-calculating</p>
-      <h1>書いた数字が、<br>そのまま<em>答え</em>になる。</h1>
-      <p class="lede">
-        memo_calc はメモ帳と電卓を一枚にしたノートです。左に書いた数式は右の列に即座に計算され、行番号で参照しあい、増減すれば自動で追従します。変数も関数呼び出しも要りません。
-      </p>
-      <div class="hero-ctas">
-        <a class="btn btn-primary" href="./index.html">無料で使ってみる</a>
-        <a class="btn btn-ghost" href="#features">機能を見る</a>
-      </div>
-
-      <div class="replica" role="img" aria-label="ノートに数式を入力すると右側に計算結果が表示される様子のデモ">
-        <div class="replica-bar">
-          <i></i><i></i><i></i>
-          <span>memo_calc.html</span>
-        </div>
-        <div class="replica-body">
-          <div class="replica-note" id="demoNote"></div>
-          <div class="replica-results" id="demoResults"></div>
-        </div>
-      </div>
-    </section>
-
-    <section id="features">
-      <div class="sec-head">
-        <div class="sec-label">FEATURES</div>
-        <h2 class="sec-title">罫線の右側で、計算がついてくる。</h2>
-      </div>
-
-      <div class="ledger">
-        <div class="ledger-row">
-          <div class="ledger-key">live calc</div>
-          <div class="ledger-val">
-            <h3>入力した瞬間に右列で計算</h3>
-            <p>数式を書くだけで、右側の結果カラムにリアルタイムで答えが出ます。<code>180000 * 10%</code> のようなパーセント記法もそのまま解釈します。</p>
-          </div>
-        </div>
-        <div class="ledger-row">
-          <div class="ledger-key">row refs</div>
-          <div class="ledger-val">
-            <h3>行を <code>S7</code> のように参照</h3>
-            <p>行番号タップで <code>S7</code> を挿入。行番号を縦にスワイプすれば <code>sum(S7,S11)</code> のような範囲合計を一発で入力できます。</p>
-          </div>
-        </div>
-        <div class="ledger-row">
-          <div class="ledger-key">auto-shift</div>
-          <div class="ledger-val">
-            <h3>行を増減しても参照はズレない</h3>
-            <p>途中に行を足したり消したりしても、<code>S</code> 参照は自動的に振り直され、参照先の実体は常に保たれます。</p>
-          </div>
-        </div>
-        <div class="ledger-row">
-          <div class="ledger-key">notes</div>
-          <div class="ledger-val">
-            <h3>日本語のラベル行はコメント扱い</h3>
-            <p>数字や演算子を含まない行、全角文字を含む行は自動でコメントとして無視されるので、見出しやメモを自由に挟めます。</p>
-          </div>
-        </div>
-        <div class="ledger-row">
-          <div class="ledger-key">display</div>
-          <div class="ledger-val">
-            <h3>小数 / 切捨 / 切上 / 四捨五入</h3>
-            <p>結果の見せ方をワンタップで切り替え。計算自体は常に元の小数値のまま、表示形式だけが変わります。</p>
-          </div>
-        </div>
-        <div class="ledger-row">
-          <div class="ledger-key">offline</div>
-          <div class="ledger-val">
-            <h3>PWA・自動保存・元に戻す</h3>
-            <p>ホーム画面に追加してオフラインでも利用可能。編集内容は自動保存され、アプリを閉じても次回そのまま復元。Undo / Redo にも対応しています。</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section>
-      <div class="sec-head">
-        <div class="sec-label">EXAMPLE</div>
-        <h2 class="sec-title">見積もりを書くだけで、合計まで出る。</h2>
-      </div>
-      <div class="example">
-        <div class="example-grid">
-          <div class="example-note"><span class="cm"># 見積もり</span>
-
-材料費
-84000
-
-作業費
-36000
-
-<span class="cm"># 合計（3行目〜6行目）</span>
-sum(S3,S6)</div>
-          <div class="example-results">　
-　
-　
-84,000
-　
-　
-36,000
-　
-　
-120,000</div>
-        </div>
-      </div>
-    </section>
-
-    <section>
-      <div class="sec-head">
-        <div class="sec-label">HOW IT WORKS</div>
-        <h2 class="sec-title">使い方は、ただ書くだけ。</h2>
-      </div>
-      <div class="steps">
-        <div class="step">
-          <div class="step-num">01</div>
-          <div>
-            <h3>ノートに数式や数字を書く</h3>
-            <p>計算式でも、ラベルや見出しでも自由に書けます。数字を含まない行は自動でコメント扱いになります。</p>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-num">02</div>
-          <div>
-            <h3>右列の結果を確認する</h3>
-            <p>該当する行の右側に、リアルタイムで計算結果が表示されます。</p>
-          </div>
-        </div>
-        <div class="step">
-          <div class="step-num">03</div>
-          <div>
-            <h3>行番号で他の行を参照する</h3>
-            <p>行番号をタップして <code>S</code> 参照を挿入、縦スワイプで範囲合計。書き足すたびに参照は自動で追従します。</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-  </main>
-
-  <footer>
-    <div class="wrap">
-      <div class="footer-cta" id="start">
-        <h2>次のメモは、計算もしてくれる。</h2>
-        <p>インストール不要。ブラウザですぐに書き始められます。</p>
-        <a class="btn btn-primary" href="./index.html">memo_calc を開く →</a>
-      </div>
-      <div class="footer-meta">
-        <span>memo_calc</span>
-        <span>plain-text notebook with live calculation</span>
-      </div>
-    </div>
-  </footer>
-
+<div id="theme-switcher">
+  <button id="theme-btn" onclick="toggleTheme()">☀ ライト表示</button>
 </div>
 
+<!-- アクセス -->
+<section id="access-hero">
+  <div class="access-inner">
+    <div class="access-icon">
+      <svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+        <rect width="128" height="128" rx="26" fill="#0f1117"/>
+        <rect x="14" y="20" width="42" height="88" rx="4" fill="#161b22" stroke="#2a2f3a" stroke-width="2"/>
+        <rect x="72" y="20" width="42" height="88" rx="4" fill="#0d1117" stroke="#2a2f3a" stroke-width="2"/>
+        <g font-family="monospace" font-size="11" fill="#e3b341">
+          <text x="20" y="38">S1</text>
+          <text x="20" y="56">S2</text>
+        </g>
+        <g font-family="monospace" font-size="11" fill="#ff6eb4">
+          <text x="38" y="38">+</text>
+        </g>
+        <g font-family="monospace" font-size="13" fill="#7ee787" text-anchor="end">
+          <text x="106" y="38">18,000</text>
+          <text x="106" y="56">198,000</text>
+        </g>
+        <line x1="14" y1="70" x2="56" y2="70" stroke="#2a2f3a" stroke-width="2"/>
+        <line x1="72" y1="70" x2="114" y2="70" stroke="#2a2f3a" stroke-width="2"/>
+        <rect x="60" y="20" width="8" height="88" fill="#39d0d8"/>
+      </svg>
+    </div>
+    <div class="access-text">
+      <h2>memo_calc</h2>
+      <p>書けば、右に答えが出るメモ帳。ブラウザで開くだけ。インストール不要・オフライン対応。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ヘッダー -->
+<header>
+  <div class="header-inner">
+    <p class="header-eyebrow">Web App · 計算メモ · PWA</p>
+    <h1>書けば、<br>右に<em>答え</em>が出る。</h1>
+    <p class="header-desc">
+      memo_calcは、文章の中に数式を混ぜて書けるメモ帳です。数字や式を含む行だけが自動で計算され、右側にリアルタイムで結果が並びます。行番号を使えば前の計算結果を参照でき、合計や平均などの関数も使えます。
+    </p>
+    <a class="header-cta" href="index.html">アプリを開く →</a>
+  </div>
+</header>
+
+<!-- ナビ -->
+<nav>
+  <div class="nav-inner">
+    <a href="#overview">概要</a>
+    <a href="#features">機能</a>
+    <a href="#howto">使い方</a>
+    <a href="#environments">対応環境</a>
+    <a href="#faq">よくある質問</a>
+  </div>
+</nav>
+
+<!-- 概要 -->
+<section id="overview">
+  <div class="section-inner">
+    <p class="section-label">Overview</p>
+    <div class="overview-grid">
+      <div class="app-mockup">
+        <div class="mockup-bar">
+          <span class="mockup-dot"></span><span class="mockup-dot"></span><span class="mockup-dot"></span>
+          <span class="mockup-title">memo_calc</span>
+        </div>
+        <div class="mockup-body">
+          <div class="mockup-lnums"><div>1</div><div>2</div><div class="cur">3</div><div>4</div></div>
+          <div class="mockup-notes">
+            <div><span class="c-num">180000</span> <span class="c-com">#税抜き価格</span></div>
+            <div><span class="c-sref">S1</span> <span class="c-op">*</span> <span class="c-num">10%</span> <span class="c-com">#消費税</span></div>
+            <div><span class="c-sref">S1</span> <span class="c-op">+</span> <span class="c-sref">S2</span> <span class="c-com">#税込価格</span></div>
+            <div class="c-com">#ここにメモを書ける</div>
+          </div>
+          <div class="mockup-divider"></div>
+          <div class="mockup-results"><div>—</div><div>18,000</div><div>198,000</div><div>—</div></div>
+        </div>
+        <div class="mockup-footer">
+          <span>合計: <span class="sum">216,000</span></span>
+          <span>行 3</span>
+        </div>
+      </div>
+      <div class="overview-text">
+        <h3>メモを書くだけで、計算はおまかせ</h3>
+        <p>
+          数字や演算子を含まない行は自動的にメモ（コメント）として扱われます。式を含む行だけがその場で計算され、右側の結果カラムに答えが表示されます。タイピングを電卓モードに切り替える必要はありません。
+        </p>
+        <p>
+          「S1」のように行番号を書けば、その行の計算結果をどこからでも参照できます。行を追加・削除してもS参照は自動で振り直されるので、メモの途中に計算を差し込んでも番号がずれる心配はありません。
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 機能 -->
+<section id="features">
+  <div class="section-inner">
+    <p class="section-label">Features</p>
+    <h2>主な機能</h2>
+    <p class="section-lead">数式入力から表示形式まで、計算メモに必要な機能をひと通り備えています。</p>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🔗</div>
+        <h3>S参照で行を呼び出す</h3>
+        <p>S1、S3のように書くだけで他の行の計算結果を参照できます。行の増減があっても参照番号は自動で振り直されます。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">Σ</div>
+        <h3>sum / avg などの関数</h3>
+        <p>sum(S1,S5)、avg(S2,S4)のほか、sqrt・round・abs・min・max・floor・ceil・piなど、よく使う関数を搭載しています。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">%</div>
+        <h3>パーセント記法</h3>
+        <p>10%と書くだけで0.1として計算されます。税率や割引の計算をそのままの見た目で書けます。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📝</div>
+        <h3>自動コメント判定</h3>
+        <p>数字や演算子を含まない行は自動的にメモ扱いになります。#を付けなくても見出しや注釈を自由に書き込めます。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">↶</div>
+        <h3>Undo / Redo（最大200件）</h3>
+        <p>操作履歴を最大200件まで保持。デバウンスされたスナップショットで、こまかい修正も安心して行えます。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⌨️</div>
+        <h3>3モード切替キーボード</h3>
+        <p>テンキー → QWERTY → OS標準の順で切り替えられる専用キーボード。Shiftのシングルタップ／ダブルタップ（CapsLock）にも対応しています。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">👆</div>
+        <h3>行番号ジェスチャー</h3>
+        <p>行番号をタップするとS参照を挿入、上下にスワイプするとsum()の範囲式を自動で挿入します。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔍</div>
+        <h3>ピンチズーム＆区切り線ドラッグ</h3>
+        <p>ピンチ操作で文字サイズを変更、区切り線を左右にドラッグして幅を調整。区切り線を上下にスワイプしても文字サイズを変えられます。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">💾</div>
+        <h3>自動保存＆ファイル入出力</h3>
+        <p>入力内容は自動でローカルストレージに保存。テキストファイルとして保存・読み込みも行えます。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🌗</div>
+        <h3>ライト／ダークテーマ</h3>
+        <p>好みに合わせてテーマを切り替えられます。設定は端末に保存され、次回起動時も引き継がれます。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔢</div>
+        <h3>表示形式の切り替え</h3>
+        <p>小数・切り捨て・切り上げ・四捨五入をボタン1つで切り替えられます。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📵</div>
+        <h3>PWA対応でオフラインでも</h3>
+        <p>ホーム画面に追加すればネイティブアプリのように起動。オフラインでも動作します。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 使い方 -->
+<section id="howto">
+  <div class="section-inner">
+    <p class="section-label">How to use</p>
+    <h2>使い方</h2>
+    <p class="section-lead">特別な操作は不要。書くだけで計算が始まります。</p>
+
+    <div class="steps">
+      <div class="step">
+        <h3>ブラウザで開く</h3>
+        <p>アプリのURLにアクセスするだけ。インストールは不要です。</p>
+      </div>
+      <div class="step">
+        <h3>数字や式を書く</h3>
+        <p>左側のノートに計算したい数字や式を1行ずつ書いていきます。</p>
+      </div>
+      <div class="step">
+        <h3>右側に結果が並ぶ</h3>
+        <p>数式を含む行は自動で計算され、右側のカラムに答えが表示されます。</p>
+      </div>
+      <div class="step">
+        <h3>S参照で前の行を使う</h3>
+        <p>「S1」のように書くと、その行の計算結果を使ってさらに計算を続けられます。</p>
+      </div>
+      <div class="step">
+        <h3>コメントで整理する</h3>
+        <p>数字を含まない行はメモとして扱われるので、見出しや注釈を自由に書き込めます。</p>
+      </div>
+      <div class="step">
+        <h3>ホーム画面に追加（任意）</h3>
+        <p>ブラウザの「ホーム画面に追加」からPWAとしてインストールできます。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 対応環境 -->
+<section id="environments">
+  <div class="section-inner">
+    <p class="section-label">Environments</p>
+    <h2>対応環境</h2>
+    <p class="section-lead">モダンブラウザであれば端末を問わず動作します。</p>
+
+    <div class="env-grid">
+      <div class="env-card">
+        <div class="env-icon">📱</div>
+        <h3>Android</h3>
+        <p>Chrome / Firefox など主要ブラウザで動作。PWAホーム画面追加に対応しています。</p>
+      </div>
+      <div class="env-card">
+        <div class="env-icon">🍎</div>
+        <h3>iPhone / iPad</h3>
+        <p>Safari・Edgeなど主要ブラウザで動作。ホーム画面に追加でスタンドアロン起動が可能です。</p>
+      </div>
+      <div class="env-card">
+        <div class="env-icon">💻</div>
+        <h3>PC（タッチ対応）</h3>
+        <p>タッチスクリーン搭載のWindowsやMacでも、ピンチズームなどのジェスチャーが使えます。</p>
+      </div>
+      <div class="env-card">
+        <div class="env-icon">🖥️</div>
+        <h3>PC（マウス＆キーボード）</h3>
+        <p>マウスでの区切り線ドラッグや物理キーボードでの入力に対応。矢印キー・Backspaceなども利用できます。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq">
+  <div class="section-inner">
+    <p class="section-label">FAQ</p>
+    <h2>よくある質問</h2>
+
+    <div class="faq-list">
+      <details>
+        <summary>無料で使えますか？</summary>
+        <p class="faq-ans">はい、完全無料でご利用いただけます。アカウント登録や課金は一切不要です。</p>
+      </details>
+      <details>
+        <summary>書いた内容はどこに保存されますか？</summary>
+        <p class="faq-ans">お使いの端末のブラウザのローカルストレージに保存されます。外部サーバーへの送信は行わないため、プライバシーが守られます。</p>
+      </details>
+      <details>
+        <summary>インターネット環境がなくても使えますか？</summary>
+        <p class="faq-ans">一度ページを読み込んだ後はオフラインでも動作します。ホーム画面に追加（PWAインストール）しておくと、より安定してオフライン利用できます。</p>
+      </details>
+      <details>
+        <summary>Excelのような複雑な数式も組めますか？</summary>
+        <p class="faq-ans">現状はsum・avg・sqrt・round・abs・min・max・floor・ceil・piなど基本的な関数に対応しています。S1のような行参照を組み合わせることで、連続した計算も簡単に書けます。</p>
+      </details>
+      <details>
+        <summary>他の端末とメモを同期できますか？</summary>
+        <p class="faq-ans">現在のところ、端末間の自動同期機能はありません。💾ボタンでテキストファイルとして保存し、他の端末で📂から読み込むことで共有できます。</p>
+      </details>
+      <details>
+        <summary>キーボードは自由に選べますか？</summary>
+        <p class="faq-ans">はい、画面下のボタンでテンキー・QWERTY・OS標準キーボードの3種類を順番に切り替えられます。</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- 開発背景 -->
+<section id="background">
+  <div class="section-inner">
+    <p class="section-label">Background</p>
+    <h2>なぜmemo_calcを作ったのか</h2>
+    <p class="section-lead">
+      ちょっとした計算をしながら、その理由や内訳もメモに残したい、という場面は意外と多いものです。
+      電卓アプリでは途中の計算式やメモがすぐに消えてしまい、表計算ソフトは開くまでに手間がかかります。
+      そこで、文章を書く感覚のまま数式を混ぜて書け、計算の根拠や経過もそのままメモとして残せる、軽量な計算ノートを目指してmemo_calcを作りました。
+    </p>
+  </div>
+</section>
+
+<!-- 技術的な仕組み -->
+<section id="tech">
+  <div class="section-inner">
+    <p class="section-label">Technology</p>
+    <h2>ブラウザだけで動く仕組み</h2>
+    <p class="section-lead">
+      入力はテキストエリアで受け取り、行ごとに正規表現ベースの簡易パーサーで数式かどうかを判定して計算しています。
+      構文ハイライトはCanvasを別レイヤーとして重ね描きし、テキストエリア自体は透明にすることで、選択やカーソル操作はブラウザ標準の挙動をそのまま保っています。
+    </p>
+    <p style="color:var(--dim);">
+      入力内容はブラウザのLocalStorageに自動保存され、外部サーバーへ送信されることはありません。Service Workerを利用したPWA化により、一度読み込めばオフラインでも利用できます。
+    </p>
+  </div>
+</section>
+
+<!-- UI/UX のこだわり -->
+<section id="ux">
+  <div class="section-inner">
+    <p class="section-label">Design</p>
+    <h2>片手でも操作しやすいUI</h2>
+    <p class="section-lead">
+      数字と式の入力を素早く行えるよう、テンキー・QWERTY・OS標準キーボードを切り替えられる専用UIを用意しました。
+      行番号のタップやスワイプだけでS参照やsum()を挿入できるなど、スマートフォンでの片手操作も意識して設計しています。
+    </p>
+  </div>
+</section>
+
+<!-- 今後のアップデート -->
+<section id="roadmap">
+  <div class="section-inner">
+    <p class="section-label">Roadmap</p>
+    <h2>今後のアップデート予定</h2>
+    <ul class="section-lead" style="padding-left:20px;">
+      <li>安定性・パフォーマンスの改善</li>
+    </ul>
+    <p style="color:var(--dim);">利用状況をもとに、より使いやすいツールへ継続的に改善していきます。</p>
+  </div>
+</section>
+
+<!-- 作者プロフィール -->
+<section id="author">
+  <div class="section-inner">
+    <p class="section-label">Author</p>
+    <h2>作者について</h2>
+    <p class="section-lead">
+      Web技術を中心に個人開発を行っています。「ブラウザだけでどこまで快適な体験を作れるか」をテーマに、UI/UXの研究や小さなツールの開発を続けています。memo_calcもその実験の一つとして制作しました。
+    </p>
+    <p style="color:var(--dim);font-size:0.9rem;">不具合報告や改善要望はいつでも歓迎しています。</p>
+  </div>
+</section>
+
+<!-- CTA -->
+<section id="cta">
+  <div class="section-inner">
+    <div class="cta-box">
+      <h2>さっそく試してみる</h2>
+      <p>インストール不要。ブラウザですぐに使い始められます。</p>
+      <a class="header-cta" href="index.html">memo_calcを開く →</a>
+    </div>
+  </div>
+</section>
+
+<!-- フッター -->
+<footer>
+  <p>memo_calc &mdash; 計算式を書き込めるメモ帳ウェブアプリ</p>
+</footer>
+
 <script>
-// ヒーローのライブタイピング・デモ：実際の操作感を再現する
-(function () {
-  const noteEl = document.getElementById('demoNote');
-  const resEl  = document.getElementById('demoResults');
-
-  const rows = [
-    { note: '消費税（10%）', result: null, comment: true },
-    { note: '180000 * 10%', result: '18,000' },
-    { note: '', result: null, blank: true },
-    { note: '税込価格', result: null, comment: true },
-    { note: '180000 * (1 + 10%)', result: '198,000' },
-  ];
-
-  function lineHTML(text, isComment) {
-    if (isComment) return `<span class="cm">${text}</span>`;
-    // 簡易トークン強調：数字=緑、演算子=ピンク
-    return text.replace(/(\d+\.?\d*%?)/g, '<span class="nm">$1</span>')
-                .replace(/([*+()])/g, '<span class="op">$1</span>');
-  }
-
-  let noteLines = [];
-  let resultLines = [];
-
-  function draw(showCaretOnLast) {
-    noteEl.innerHTML = noteLines.map((l, i) =>
-      (i === noteLines.length - 1 && showCaretOnLast)
-        ? l.html + '<span class="caret"></span>'
-        : l.html
-    ).join('\n');
-    resEl.innerHTML = resultLines.join('\n');
-  }
-
-  async function typeRow(row) {
-    noteLines.push({ html: '' });
-    resultLines.push('\u00A0');
-    let acc = '';
-    const full = row.note;
-    for (let i = 0; i <= full.length; i++) {
-      acc = full.slice(0, i);
-      noteLines[noteLines.length - 1] = { html: lineHTML(acc, row.comment) };
-      draw(true);
-      await sleep(row.comment ? 28 : 36);
-    }
-    await sleep(180);
-    if (row.result) {
-      resultLines[resultLines.length - 1] = row.result;
-      draw(false);
-    } else {
-      draw(false);
-    }
-    await sleep(row.blank ? 80 : 320);
-  }
-
-  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-  async function runLoop() {
-    while (true) {
-      noteLines = [];
-      resultLines = [];
-      draw(false);
-      for (const row of rows) {
-        await typeRow(row);
-      }
-      await sleep(1800);
-    }
-  }
-
-  // ユーザーがアニメーション削減を希望する場合は静的表示のみ
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    noteLines = rows.map(r => ({ html: lineHTML(r.note || '\u00A0', r.comment) }));
-    resultLines = rows.map(r => r.result || '\u00A0');
-    draw(false);
-  } else {
-    runLoop();
+function toggleTheme() {
+  const root = document.getElementById('html-root');
+  const btn = document.getElementById('theme-btn');
+  const isLight = root.classList.toggle('light');
+  btn.textContent = isLight ? '🌙 ダーク表示' : '☀ ライト表示';
+  localStorage.setItem('memo_calc_about_theme', isLight ? 'light' : 'dark');
+}
+(function() {
+  if (localStorage.getItem('memo_calc_about_theme') === 'light') {
+    document.getElementById('html-root').classList.add('light');
+    document.getElementById('theme-btn').textContent = '🌙 ダーク表示';
   }
 })();
 </script>
-
 </body>
 </html>

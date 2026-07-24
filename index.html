@@ -198,33 +198,6 @@ body {
 .lnum { cursor: pointer; }
 .lnum:hover { color: var(--cyan) !important; background: rgba(57,208,216,0.08); }
 
-/* Help */
-#help-overlay {
-  display: none; position: fixed; inset: 0;
-  background: rgba(0,0,0,.72);
-  align-items: center; justify-content: center; z-index: 100;
-  touch-action: manipulation;
-}
-#help-overlay.open { display: flex; }
-#help-box {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 12px; padding: 24px 28px;
-  max-width: 440px; width: 90%;
-  font-size: 13px; line-height: 1.8;
-}
-#help-box h2 { color: var(--cyan); font-size: 15px; margin-bottom: 12px; }
-.help-sec-title { color: var(--yellow); font-size: 11px; margin-top: 10px; margin-bottom: 3px; }
-.help-code {
-  display: inline-block; background: var(--result-bg); color: var(--green);
-  border-radius: 4px; padding: 1px 6px; margin: 2px 4px 2px 0; font-size: 12px;
-  font-family: var(--font);
-}
-#help-close {
-  margin-top: 16px; background: var(--cyan); color: #0f1117;
-  border: none; border-radius: 6px; padding: 6px 20px;
-  cursor: pointer; font-weight: 700; font-size: 13px; font-family: var(--font);
-  touch-action: manipulation;
-}
 </style>
 </head>
 <body>
@@ -239,7 +212,7 @@ body {
   <button class="hbtn" id="btn-select-all" title="ノートを全選択" style="padding:3px 8px;font-size:12px;line-height:1;">全</button>
   <div id="hdr-right">
     <button class="hbtn" id="btn-clear">クリア</button>
-    <button class="hbtn" id="btn-help">使い方</button>
+    <button class="hbtn" id="btn-help" title="このアプリについて（about.htmlを開く）" style="padding:3px 10px;font-size:13px;line-height:1;">？</button>
     <button class="hbtn" id="btn-theme" title="テーマ切替" style="padding:3px 8px;font-size:14px;line-height:1;">☀</button>
     <button class="hbtn" id="btn-fs" title="フルスクリーン" style="padding:3px 8px;font-size:14px;line-height:1;">⛶</button>
   </div>
@@ -355,26 +328,6 @@ body {
     <button class="qkey arrow" data-k="arrow-right">→</button>
     <button class="qkey space" data-k=" ">space</button>
     <button class="qkey accent" data-k="enter">↵</button>
-  </div>
-</div>
-
-<div id="help-overlay">
-  <div id="help-box">
-    <h2>📐 memo_calc 使い方</h2>
-    <div class="help-sec-title">基本計算</div>
-    <span class="help-code">1 + 2</span><span class="help-code">100 * 0.8</span><span class="help-code">2 ^ 10</span><span class="help-code">15 % 4</span><span class="help-code">10%</span> → 0.1
-    <div class="help-sec-title">行参照</div>
-    <span class="help-code">S1</span><span class="help-code">S3</span> — その行の計算結果を参照
-    <div class="help-sec-title">関数</div>
-    <span class="help-code">sum(S1,S5)</span><span class="help-code">avg(S2,S4)</span><span class="help-code">sqrt(144)</span><span class="help-code">round(3.14,1)</span><span class="help-code">abs(-5)</span><span class="help-code">min(a,b)</span><span class="help-code">max(a,b)</span>
-    <div class="help-sec-title">コメント</div>
-    <span class="help-code"># これはコメント</span><span class="help-code">メモ書きもOK</span>
-    数字・演算子を含まない行は自動でコメント扱いになります
-    <div class="help-sec-title">ジェスチャー</div>
-    ピンチイン／アウト → 文字サイズ変更<br>
-    区切り線を左右ドラッグ → 幅調整
-    <br>
-    <button id="help-close">閉じる</button>
   </div>
 </div>
 
@@ -1304,13 +1257,7 @@ fileLoadInput.addEventListener('change', () => {
 });
 
 document.getElementById('btn-help').addEventListener('click', () => {
-  document.getElementById('help-overlay').classList.add('open');
-});
-document.getElementById('help-close').addEventListener('click', () => {
-  document.getElementById('help-overlay').classList.remove('open');
-});
-document.getElementById('help-overlay').addEventListener('click', e => {
-  if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+  window.open('about.html', '_blank');
 });
 
 /* ── 初期値（localStorageから復元、なければサンプル） ── */
