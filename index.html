@@ -213,7 +213,7 @@ body {
   <button class="hbtn" id="btn-select-all" title="ノートを全選択" style="padding:3px 8px;font-size:12px;line-height:1;">全</button>
   <div id="hdr-right">
     <button class="hbtn" id="btn-clear">クリア</button>
-    <button class="hbtn" id="btn-help" title="このアプリについて（about.htmlを開く）" style="padding:3px 10px;font-size:13px;line-height:1;">？</button>
+    <a class="hbtn" id="btn-help" href="about.html" target="_blank" rel="noopener" title="このアプリについて（about.htmlを開く）" style="padding:3px 10px;font-size:13px;line-height:1;text-decoration:none;">？</a>
     <button class="hbtn" id="btn-theme" title="テーマ切替" style="padding:3px 8px;font-size:14px;line-height:1;">☀</button>
     <button class="hbtn" id="btn-fs" title="フルスクリーン" style="padding:3px 8px;font-size:14px;line-height:1;">⛶</button>
   </div>
@@ -1278,9 +1278,7 @@ fileLoadInput.addEventListener('change', () => {
   apply();
 });
 
-document.getElementById('btn-help').addEventListener('click', () => {
-  window.open('about.html', '_blank');
-});
+// ❔ヘルプボタン: 通常の<a href>リンクとしてabout.htmlを新しいタブで開く
 
 /* ── 初期値（localStorageから復元、なければサンプル） ── */
 const SAMPLE = `# memo_calc へようこそ！
