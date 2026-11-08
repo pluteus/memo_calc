@@ -639,6 +639,24 @@ document.addEventListener('touchend', e => {
   if (e.touches.length < 2) pinchStartDist = null;
 }, { passive: true });
 
+/* ── タッチパッドのピンチ（Ctrl+wheel）→ 文字サイズ ── */
+let wheelFS = fontSize; // 小数で蓄積して滑らかに拡縮する
+
+document.addEventListener('wheel', e => {
+  if (!e.ctrlKey) return;      // 通常のスクロールは何もしない
+  e.preventDefault();          // ページ全体のズームを禁止
+
+  if (Math.round(wheelFS) !== fontSize) wheelFS = fontSize; // 他の操作で変わっていたら同期
+  const d = Math.max(-10, Math.min(10, e.deltaY)); // マウスのCtrl+ホイールでも急変しないよう制限
+  wheelFS = Math.min(MAX_FS, Math.max(MIN_FS, wheelFS - d * 0.15));
+
+  const next = Math.round(wheelFS);
+  if (next !== fontSize) {
+    fontSize = next;
+    render();
+  }
+}, { passive: false });
+
 /* ── 区切り線ドラッグ：横スワイプ＝幅調整、縦スワイプ＝文字サイズ調整 ── */
 let divDragging = false;
 let divMode     = null;   // 'h'(幅) | 'v'(文字サイズ) ／ 移動量から最初に判定してロック
@@ -826,6 +844,7 @@ btnRedo.addEventListener('click', () => {
 
 document.addEventListener('keydown', e => {
   const mod = e.ctrlKey || e.metaKey;
+  if (mod && ['+', '=', '-', '_', '0'].includes(e.key)) e.preventDefault(); // キーボードによるページズームも禁止
   if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); btnUndo.click(); }
   if (mod && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase()==='z' && e.shiftKey))) { e.preventDefault(); btnRedo.click(); }
 });
