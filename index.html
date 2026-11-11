@@ -45,12 +45,43 @@
   --result-num: #0000FF;
 }
 body {
-  background: var(--bg); color: var(--text);
+  background: #000; color: var(--text);
   font-family: var(--font); font-size: 14px;
-  height: 100dvh; display: flex; flex-direction: column; overflow: hidden;
+  height: 100dvh; overflow: hidden;
   /* ブラウザのピンチズームを無効化 */
   touch-action: none;
 }
+/* ── 回転ステージ／アプリ本体 ──
+ * 端末自体は回せない環境でもアプリ内の表示だけを90度単位で回すため、
+ * 本体(#app)をステージ中央に絶対配置し、transformで回転させる。
+ * 90/270度では幅と高さが入れ替わる。回転の切り替わりは店内マップと
+ * 同じ260msのイーズインアウトでアニメーションする。 */
+#rotate-stage { position: relative; width: 100dvw; height: 100dvh; background: #000; overflow: hidden; }
+#app {
+  position: absolute; top: 50%; left: 50%;
+  background: var(--bg); color: var(--text);
+  font-family: var(--font); font-size: 14px;
+  display: flex; flex-direction: column; overflow: hidden;
+  transition: transform 260ms cubic-bezier(0.65,0,0.35,1), width 260ms cubic-bezier(0.65,0,0.35,1), height 260ms cubic-bezier(0.65,0,0.35,1);
+}
+@media (prefers-reduced-motion: reduce) { #app { transition: none; } }
+#body-area { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+#body-area.side { flex-direction: row; }
+#editor-col { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+#kb-side { display: none; }
+#body-area.side #kb-side { display: flex; }
+#kb-side > #numpad, #kb-side > #qwerty { height: 100%; }
+#numpad.kb-side { width: min(320px, 42%); grid-template-rows: repeat(6, 1fr); border-top: none; border-left: 1px solid var(--border); }
+#qwerty.kb-side { width: min(400px, 52%); border-top: none; border-left: 1px solid var(--border); }
+#qwerty.kb-side .qw-row { flex: 1; }
+/* 短い横向き（横向き＋高さ620px以下）ではヘッダーとキーをコンパクトに */
+#app.landscape-compact #hdr { padding-top: 4px; padding-bottom: 4px; }
+#app.landscape-compact .npkey { padding: 4px 0; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+#app.landscape-compact .qkey { padding: 3px 0; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+/* 回転アニメーション中の入力ロック */
+#rotate-lock { position: absolute; inset: 0; z-index: 50; background: transparent; touch-action: none; display: none; }
+#rotate-lock.on { display: block; }
+.hbtn.active { color: var(--cyan); border-color: var(--cyan); }
 #hdr {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 14px; background: var(--surface);
@@ -204,6 +235,9 @@ body {
 </head>
 <body>
 
+<div id="rotate-stage">
+<div id="app">
+
 <div id="hdr">
   <h1>memo_calc</h1>
   <button class="hbtn" id="btn-share" title="ノートを共有（Google Keepなど）" style="padding:3px 8px;font-size:14px;line-height:1;">📤</button>
@@ -217,10 +251,13 @@ body {
     <button class="hbtn" id="btn-clear">クリア</button>
     <a class="hbtn" id="btn-help" href="about.html" target="_blank" rel="noopener" title="このアプリについて（about.htmlを開く）" style="padding:3px 10px;font-size:13px;line-height:1;text-decoration:none;">？</a>
     <button class="hbtn" id="btn-theme" title="テーマ切替" style="padding:3px 8px;font-size:14px;line-height:1;">☀</button>
+    <button class="hbtn" id="btn-rotate" title="画面を90度回転（ノートエリアの2本指ツイストでも回転）" style="padding:3px 8px;font-size:14px;line-height:1;">⟳</button>
     <button class="hbtn" id="btn-fs" title="フルスクリーン" style="padding:3px 8px;font-size:14px;line-height:1;">⛶</button>
   </div>
 </div>
 
+<div id="body-area">
+<div id="editor-col">
 <div id="main">
   <div id="lnums"></div>
   <div id="editor-wrap">
@@ -234,9 +271,14 @@ body {
 <div id="footer">
   <span>合計: <span id="status-sum">—</span></span>
   <span id="status-pos">行 1</span>
+  <span id="status-rot" style="display:none;color:var(--cyan);"></span>
+  <span id="status-kbhidden" style="display:none;color:var(--cyan);">キーボード非表示中（エディタをタップで再表示）</span>
   <button class="hbtn" id="btn-dispmode" title="表示形式切替" style="margin-left:auto;padding:2px 8px;font-size:12px;font-family:var(--font);min-width:48px;text-align:center;">小数</button>
   <button class="hbtn" id="btn-numpad" title="テンキー切替" style="padding:2px 8px;font-size:12px;">🔢</button>
 </div>
+</div><!-- /editor-col -->
+<div id="kb-side"></div>
+</div><!-- /body-area -->
 
 <div id="numpad">
   <button class="npkey" data-k="7">7</button>
@@ -333,6 +375,9 @@ body {
     <button class="qkey accent" data-k="enter">↵</button>
   </div>
 </div>
+<div id="rotate-lock" aria-hidden="true"></div>
+</div><!-- /app -->
+</div><!-- /rotate-stage -->
 
 <script>
 const ta        = document.getElementById('ta');
@@ -343,6 +388,13 @@ const resultsEl = document.getElementById('results');
 const statusSum = document.getElementById('status-sum');
 const statusPos = document.getElementById('status-pos');
 const divider   = document.getElementById('divider');
+const appEl        = document.getElementById('app');
+const mainEl       = document.getElementById('main');
+const bodyAreaEl   = document.getElementById('body-area');
+const kbSideEl     = document.getElementById('kb-side');
+const rotateLockEl = document.getElementById('rotate-lock');
+const statusRot    = document.getElementById('status-rot');
+const statusKbHidden = document.getElementById('status-kbhidden');
 
 /* ── 可変パラメータ ── */
 let fontSize    = 14;   // px
@@ -370,6 +422,7 @@ function getC() {
 function getTokens(C) {
   return [
     { re:/^(sum|avg|sqrt|abs|round|min|max|floor|ceil|pi)\b/i, col:C.fn },
+    { re:/^(\$\d+)/,       col:C.sref },
     { re:/^(S\d+)\b/i,    col:C.sref },
     { re:/^(\d+\.?\d*)/, col:C.num },
     { re:/^([+\-*\/\^%])/,col:C.op },
@@ -428,14 +481,15 @@ function drawHighlight(lines, scrollTop, scrollLeft) {
 }
 
 /* ── 数式評価 ── */
-// 文字列のみの行（数式でない行）を判定する：演算子・関数・数字・S参照を含まない
+// 文字列のみの行（数式でない行）を判定する：演算子・関数・数字・$参照を含まない
 function isCommentLike(raw) {
   // 全角文字（日本語・全角記号など）を含む行はコメント扱い
   if (/[^\x00-\x7F]/.test(raw)) return true;
-  // 数字、演算子、関数名、S参照、カッコのいずれも含まなければコメント扱い
+  // 数字、演算子、関数名、$参照、カッコのいずれも含まなければコメント扱い
   return !/[\d+\-*\/\^%()=]/.test(raw) &&
     !/\b(sum|avg|sqrt|abs|round|min|max|floor|ceil|pi)\b/i.test(raw) &&
-    !/\bS\d+\b/i.test(raw);
+    !/\bS\d+\b/i.test(raw) &&
+    !/\$\d+/.test(raw);
 }
 
 function evaluate(lines) {
@@ -448,15 +502,26 @@ function evaluate(lines) {
     // 空行・#コメント・文字列のみの行はすべてempty（コメント）扱い
     if (!raw || isCommentLike(raw)) { res.push({ type:'empty' }); continue; }
     try {
-      // sum/avg を単体S参照展開より先に処理する
+      // sum/avg を単体$参照展開より先に処理する（旧S表記も互換のため処理）
       let expr = raw;
+      expr = expr.replace(/\bsum\(\$(\d+),\$(\d+)\)/gi,(_,a,b)=>{
+        const lo=Math.min(+a,+b)-1,hi=Math.max(+a,+b)-1; let s=0;
+        for(let j=lo;j<=hi;j++) if(res[j]?.type==='number') s+=res[j].value; return s;
+      });
       expr = expr.replace(/\bsum\(S(\d+),S(\d+)\)/gi,(_,a,b)=>{
         const lo=Math.min(+a,+b)-1,hi=Math.max(+a,+b)-1; let s=0;
         for(let j=lo;j<=hi;j++) if(res[j]?.type==='number') s+=res[j].value; return s;
       });
+      expr = expr.replace(/\bavg\(\$(\d+),\$(\d+)\)/gi,(_,a,b)=>{
+        const lo=Math.min(+a,+b)-1,hi=Math.max(+a,+b)-1; let s=0,c=0;
+        for(let j=lo;j<=hi;j++) if(res[j]?.type==='number'){s+=res[j].value;c++;} return c?s/c:'NaN';
+      });
       expr = expr.replace(/\bavg\(S(\d+),S(\d+)\)/gi,(_,a,b)=>{
         const lo=Math.min(+a,+b)-1,hi=Math.max(+a,+b)-1; let s=0,c=0;
         for(let j=lo;j<=hi;j++) if(res[j]?.type==='number'){s+=res[j].value;c++;} return c?s/c:'NaN';
+      });
+      expr = expr.replace(/\$(\d+)/g, (_,n) => {
+        const r = res[+n-1]; return r?.type==='number' ? r.value : 'NaN';
       });
       expr = expr.replace(/S(\d+)/gi, (_,n) => {
         const r = res[+n-1]; return r?.type==='number' ? r.value : 'NaN';
@@ -607,17 +672,120 @@ function updateCursor() {
   statusPos.textContent = `行 ${curLine+1}`;
 }
 
-/* ── ピンチズーム → 文字サイズ ── */
+/* ── 画面回転（2本指ツイスト／ヘッダー⟳ボタン）と表示方向の追従 ──
+ * 端末・ブラウザ自体を回せない環境でもアプリ内の表示だけを回すため、
+ * 表示回転は端末に保存されるアプリ内状態（0/90/180/270度）。
+ * 回転が変わると260msのアニメーションが再生され、その間は入力を
+ * ロックする（店内マップと同じ方式）。 */
+let viewRotation = (() => {
+  const n = parseInt(localStorage.getItem('calcpad-rotation') ?? '0', 10);
+  return (n === 90 || n === 180 || n === 270) ? n : 0;
+})();
+let rotating = false;
+let rotationInit = true;
+let vpW = window.innerWidth, vpH = window.innerHeight;
+let isLandscape = vpW > vpH;
+let isShortLandscape = isLandscape && vpH <= 620;
+function oddRotation() { return viewRotation === 90 || viewRotation === 270; }
+function effLandscape() { return oddRotation() ? !isLandscape : isLandscape; }
+function effH() { return oddRotation() ? vpW : vpH; }
+function effShortLandscape() {
+  return oddRotation() ? (effLandscape() && effH() <= 620) : isShortLandscape;
+}
+function applyAppBox() {
+  appEl.style.width  = oddRotation() ? '100dvh' : '100dvw';
+  appEl.style.height = oddRotation() ? '100dvw' : '100dvh';
+  appEl.style.transform = `translate(-50%, -50%) rotate(${viewRotation}deg)`;
+  appEl.classList.toggle('landscape', effLandscape());
+  appEl.classList.toggle('landscape-compact', effShortLandscape());
+  const btn = document.getElementById('btn-rotate');
+  if (btn) {
+    btn.classList.toggle('active', viewRotation !== 0);
+    btn.title = viewRotation === 0
+      ? '画面を90度回転（ノートエリアの2本指ツイストでも回転）'
+      : `画面を90度回転（現在 ${viewRotation}度）`;
+  }
+  if (statusRot) {
+    if (viewRotation !== 0) {
+      statusRot.style.display = '';
+      statusRot.textContent = `画面 ${viewRotation}° 回転中`;
+    } else statusRot.style.display = 'none';
+  }
+}
+function onRotationChanged() {
+  localStorage.setItem('calcpad-rotation', String(viewRotation));
+  applyAppBox();
+  if (typeof updateKbLayout === 'function') updateKbLayout();
+  if (rotationInit) {
+    rotationInit = false;
+  } else {
+    rotating = true;
+    rotateLockEl.classList.add('on');
+    setTimeout(() => { rotating = false; rotateLockEl.classList.remove('on'); render(); }, 280);
+  }
+  requestAnimationFrame(() => render());
+  setTimeout(() => render(), 120);
+  setTimeout(() => render(), 350);
+}
+function rotateView(dir) {
+  if (rotating) return;
+  viewRotation = (((viewRotation + dir * 90) % 360) + 360) % 360;
+  onRotationChanged();
+}
+document.getElementById('btn-rotate').addEventListener('click', () => rotateView(1));
+function updateViewport() {
+  vpW = window.innerWidth; vpH = window.innerHeight;
+  isLandscape = vpW > vpH;
+  isShortLandscape = isLandscape && vpH <= 620;
+  applyAppBox();
+  if (typeof updateKbLayout === 'function') updateKbLayout();
+}
+window.addEventListener('resize', updateViewport);
+window.addEventListener('orientationchange', () => {
+  updateViewport();
+  requestAnimationFrame(updateViewport);
+  setTimeout(updateViewport, 120);
+  setTimeout(updateViewport, 350);
+});
+if (screen.orientation && screen.orientation.addEventListener) {
+  screen.orientation.addEventListener('change', () => {
+    updateViewport();
+    setTimeout(updateViewport, 120);
+    setTimeout(updateViewport, 350);
+  });
+}
+
+/* ── ピンチズーム → 文字サイズ ＋ 2本指ツイスト → 画面回転 ── */
 let pinchStartDist = null;
 let pinchStartFS   = fontSize;
+let twistStartAngle = null;
+let twistOnNoteArea = false;
+let twistFired = false;
+function touchDist(t) {
+  return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+}
+function touchAngle(t) {
+  return Math.atan2(t[1].clientY - t[0].clientY, t[1].clientX - t[0].clientX) * 180 / Math.PI;
+}
+function angleDelta(a, b) {
+  let d = a - b;
+  while (d > 180) d -= 360;
+  while (d < -180) d += 360;
+  return d;
+}
+function inNoteArea(t) {
+  const r = mainEl.getBoundingClientRect();
+  return t.clientX >= r.left && t.clientX <= r.right &&
+         t.clientY >= r.top && t.clientY <= r.bottom;
+}
 
 document.addEventListener('touchstart', e => {
   if (e.touches.length === 2) {
-    pinchStartDist = Math.hypot(
-      e.touches[0].clientX - e.touches[1].clientX,
-      e.touches[0].clientY - e.touches[1].clientY
-    );
+    pinchStartDist = touchDist(e.touches);
     pinchStartFS = fontSize;
+    twistStartAngle = touchAngle(e.touches);
+    twistOnNoteArea = inNoteArea(e.touches[0]) && inNoteArea(e.touches[1]);
+    twistFired = false;
     e.preventDefault();
   }
 }, { passive: false });
@@ -625,10 +793,19 @@ document.addEventListener('touchstart', e => {
 document.addEventListener('touchmove', e => {
   if (e.touches.length === 2 && pinchStartDist !== null) {
     e.preventDefault();
-    const dist = Math.hypot(
-      e.touches[0].clientX - e.touches[1].clientX,
-      e.touches[0].clientY - e.touches[1].clientY
-    );
+    if (twistFired) return;
+    const dist = touchDist(e.touches);
+    if (twistOnNoteArea && twistStartAngle !== null) {
+      const d = angleDelta(touchAngle(e.touches), twistStartAngle);
+      if (Math.abs(d) >= 45) {
+        twistFired = true;
+        rotateView(d > 0 ? 1 : -1);
+        return;
+      }
+      // 指が回っている間は、はっきりピンチと分かるまではズームしない
+      const ratio = dist / (pinchStartDist || 1);
+      if (Math.abs(d) > 12 && ratio > 0.9 && ratio < 1.1) return;
+    }
     const ratio = dist / pinchStartDist;
     fontSize = Math.min(MAX_FS, Math.max(MIN_FS, Math.round(pinchStartFS * ratio)));
     render();
@@ -636,7 +813,12 @@ document.addEventListener('touchmove', e => {
 }, { passive: false });
 
 document.addEventListener('touchend', e => {
-  if (e.touches.length < 2) pinchStartDist = null;
+  if (e.touches.length < 2) {
+    pinchStartDist = null;
+    twistStartAngle = null;
+    twistOnNoteArea = false;
+    twistFired = false;
+  }
 }, { passive: true });
 
 /* ── タッチパッドのピンチ（Ctrl+wheel）→ 文字サイズ ── */
@@ -743,7 +925,7 @@ document.addEventListener('touchmove', e => {
 }, { passive: false });
 document.addEventListener('touchend', endDivDrag);
 
-/* ── S参照自動修正 ── */
+/* ── $参照自動修正（旧S表記も対象） ── */
 let prevLines = [];
 
 function fixSRefs(oldLines, newLines) {
@@ -759,14 +941,15 @@ function fixSRefs(oldLines, newLines) {
     if (oldLines[i] !== newLines[i]) { changeAt = i; break; }
     changeAt = i + 1;
   }
-  // 変化点の行自体が編集中の行（その行のS参照は触らない）
-  // 変化点より下の行のS参照番号をdeltaだけずらす
+  // 変化点の行自体が編集中の行（その行の$参照は触らない）
+  // 変化点より下の行の$参照番号をdeltaだけずらす
   const cursorPos = ta.selectionStart;
   const result = newLines.map((line, i) => {
     if (i <= changeAt) return line;
-    return line.replace(/S(\d+)/gi, (match, n) => {
-      const num = parseInt(n);
-      return num > changeAt ? `S${num + delta}` : match;
+    return line.replace(/\$(\d+)|S(\d+)/gi, (match, dn, sn) => {
+      const num = parseInt(dn ?? sn);
+      if (!(num > changeAt)) return match;
+      return dn !== undefined ? `$${num + delta}` : `S${num + delta}`;
     });
   });
 
@@ -861,7 +1044,7 @@ ta.addEventListener('input', () => {
   scheduleUndoSnapshot();
 });
 ta.addEventListener('keyup',  () => { updateCursor(); render(); });
-ta.addEventListener('click',  () => { updateCursor(); render(); });
+ta.addEventListener('click',  () => { if (kbHidden) setKbHidden(false); updateCursor(); render(); });
 ta.addEventListener('scroll', syncScroll);
 
 ta.addEventListener('keydown', e => {
@@ -969,6 +1152,8 @@ const KB_TITLE  = {
   normal: '通常入力中（タップでテンキー入力に切替）',
 };
 let kbMode  = 'normal';
+let kbHidden = false;
+let suppressPadClick = false;
 let qwShift  = false;
 let capsLock = false;
 let lastShiftTap = 0;
@@ -1008,28 +1193,96 @@ function handleShiftTap() {
   setQwShift(!qwShift);
 }
 
+function softwareKbVisible() { return kbMode !== 'normal' && !kbHidden; }
+function isSideKb() { return effShortLandscape() && softwareKbVisible(); }
+function updateKbLayout() {
+  const side = isSideKb();
+  bodyAreaEl.classList.toggle('side', side);
+  for (const kb of [numpad, qwerty]) {
+    kb.classList.toggle('kb-side', side);
+    if (side) {
+      if (kb.parentElement !== kbSideEl) kbSideEl.appendChild(kb);
+    } else if (kb.parentElement !== appEl) {
+      appEl.insertBefore(kb, rotateLockEl);
+    }
+  }
+  numpad.classList.toggle('open', softwareKbVisible() && kbMode === 'numpad');
+  qwerty.classList.toggle('open', softwareKbVisible() && kbMode === 'qwerty');
+  btnNumpad.classList.toggle('active', kbMode !== 'normal');
+  btnNumpad.textContent = (kbHidden && kbMode !== 'normal') ? '⌨️' : KB_ICON[kbMode];
+  btnNumpad.title = (kbHidden && kbMode !== 'normal') ? 'キーボードを表示' : KB_TITLE[kbMode];
+  if (statusKbHidden) {
+    statusKbHidden.style.display = (kbHidden && kbMode !== 'normal') ? '' : 'none';
+  }
+  // ソフトウェアキーボード表示中だけOSキーボードを抑制する
+  if (softwareKbVisible()) ta.setAttribute('inputmode', 'none');
+  else ta.removeAttribute('inputmode');
+}
+function setKbHidden(hidden) {
+  kbHidden = hidden;
+  updateKbLayout();
+  render();
+}
 function setKbMode(mode) {
   kbMode = mode;
-  numpad.classList.toggle('open', mode === 'numpad');
-  qwerty.classList.toggle('open', mode === 'qwerty');
-  btnNumpad.classList.toggle('active', mode !== 'normal');
-  btnNumpad.textContent = KB_ICON[mode];
-  btnNumpad.title = KB_TITLE[mode];
+  kbHidden = false;
   if (mode === 'qwerty') { qwShift = false; capsLock = false; setQwShift(false); }
-  if (mode === 'numpad' || mode === 'qwerty') {
-    // ソフトウェアキーボードだけ抑制し、カーソル移動・選択は維持する
-    ta.setAttribute('inputmode', 'none');
-  } else {
-    ta.removeAttribute('inputmode');
-  }
+  updateKbLayout();
   ta.focus();
 }
 
+/* ── キーボードのスワイプ非表示 ──
+ * キーボードが付いている端の方向へスワイプすると隠れる：下部配置では
+ * 下スワイプ、右側の列では右スワイプ。ポインタの移動量は画面座標で
+ * 届くため、表示回転に応じて表示側の座標へ変換してから判定する。
+ * 48px以上かつ主軸が支配的なスワイプだけに反応し、通常のキー
+ * タップや短いドラッグでは発火しない。 */
+function kbSwipeHit(screenDx, screenDy) {
+  let dx = screenDx, dy = screenDy;
+  switch (viewRotation) {
+    case 90:  dx = screenDy;  dy = -screenDx; break;
+    case 180: dx = -screenDx; dy = -screenDy; break;
+    case 270: dx = -screenDy; dy = screenDx;  break;
+    default: break;
+  }
+  if (isSideKb()) return dx > 48 && dx > Math.abs(dy) * 1.2;
+  return dy > 48 && dy > Math.abs(dx) * 1.2;
+}
+let kbSwipeStart = null;
+function attachKbSwipe(el) {
+  el.addEventListener('pointerdown', e => {
+    kbSwipeStart = { x: e.clientX, y: e.clientY, swiped: false };
+  });
+  el.addEventListener('pointermove', e => {
+    if (!kbSwipeStart) return;
+    if (kbSwipeHit(e.clientX - kbSwipeStart.x, e.clientY - kbSwipeStart.y)) {
+      kbSwipeStart.swiped = true;
+    }
+  });
+  el.addEventListener('pointerup', e => {
+    const s = kbSwipeStart;
+    kbSwipeStart = null;
+    if (!s) return;
+    if (s.swiped || kbSwipeHit(e.clientX - s.x, e.clientY - s.y)) {
+      suppressPadClick = true;
+      setTimeout(() => { suppressPadClick = false; }, 200);
+      setKbHidden(true);
+    }
+  });
+  el.addEventListener('pointercancel', () => { kbSwipeStart = null; });
+}
+attachKbSwipe(numpad);
+attachKbSwipe(qwerty);
+
 btnNumpad.addEventListener('click', () => {
+  if (kbHidden) { setKbHidden(false); ta.focus(); return; }
   const idx = KB_MODES.indexOf(kbMode);
   setKbMode(KB_MODES[(idx + 1) % KB_MODES.length]);
 });
+applyAppBox();
 setKbMode('numpad');
+updateKbLayout();
+rotationInit = false;
 
 /* ── 表示形式切替ボタン ── */
 const btnDispMode = document.getElementById('btn-dispmode');
@@ -1062,6 +1315,7 @@ function npApplyEdit(newValue, newCursorPos) {
 }
 
 numpad.addEventListener('click', e => {
+  if (suppressPadClick) { suppressPadClick = false; return; }
   const btn = e.target.closest('.npkey');
   if (!btn) return;
   const k = btn.dataset.k;
@@ -1122,6 +1376,7 @@ function qwMoveCursor(dir) {
 }
 
 qwerty.addEventListener('click', e => {
+  if (suppressPadClick) { suppressPadClick = false; return; }
   const btn = e.target.closest('.qkey');
   if (!btn) return;
   const k = btn.dataset.k;
@@ -1204,10 +1459,10 @@ lnums.addEventListener('touchend', e => {
   if (!lnumSwipeStart) return;
   if (lnumSwiping && lnumHighlight) {
     // スワイプ → sum() 挿入
-    insertAtCursor(`sum(S${lnumHighlight.from},S${lnumHighlight.to})`);
+    insertAtCursor(`sum($${lnumHighlight.from},$${lnumHighlight.to})`);
   } else {
-    // タップ → S参照挿入（従来動作）
-    insertAtCursor(`S${lnumSwipeStart.lineNo}`);
+    // タップ → $参照挿入
+    insertAtCursor(`$${lnumSwipeStart.lineNo}`);
   }
   // ハイライトリセット
   document.querySelectorAll('.lnum').forEach(el => {
@@ -1224,7 +1479,7 @@ lnums.addEventListener('click', e => {
   if (!el) return;
   const lineNo = parseInt(el.dataset.line);
   if (isNaN(lineNo)) return;
-  insertAtCursor(`S${lineNo}`);
+  insertAtCursor(`$${lineNo}`);
 });
 
 document.getElementById('btn-select-all').addEventListener('click', () => {
@@ -1307,21 +1562,26 @@ const SAMPLE = `# memo_calc へようこそ！
 # 数字・演算子を含まない行はコメント扱いになります
 
 180000 #税抜き価格
-S5 * 10% #消費税（10%）
-S5 + S6 #税込価格
+$5 * 10% #消費税（10%）
+$5 + $6 #税込価格
 
 13% #ポイント率
-S7 * S9 #ポイント数
+$7 * $9 #ポイント数
 
-S7 - S10 #実質売価
+$7 - $10 #実質売価
 
 23100 #延長保証
 36300 #サポート料金
 
 # 合計（12行目〜15行目）
-sum(S12,S15)
+sum($12,$15)
 `;
-ta.value = localStorage.getItem('calcpad-note') ?? SAMPLE;
+(function(){ const saved = localStorage.getItem('calcpad-note');
+  if (saved === null) { ta.value = SAMPLE; return; }
+  // 旧S参照で保存されたノートは$参照へ移行（計算結果・数値はそのまま）
+  const migrated = saved.replace(/\bS(\d+)\b/g, '$$$1');
+  if (migrated !== saved) localStorage.setItem('calcpad-note', migrated);
+  ta.value = migrated; })();
 undoStack = [{ value: ta.value, sel: 0 }];
 redoStack = [];
 updateUndoRedoBtns();
