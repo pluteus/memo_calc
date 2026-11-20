@@ -76,8 +76,8 @@ body {
 #qwerty.kb-side .qw-row { flex: 1; }
 /* 短い横向き（横向き＋高さ620px以下）ではヘッダーとキーをコンパクトに */
 #app.landscape-compact #hdr { padding-top: 4px; padding-bottom: 4px; }
-#app.landscape-compact .npkey { padding: 4px 0; font-size: 16px; display: flex; align-items: center; justify-content: center; }
-#app.landscape-compact .qkey { padding: 3px 0; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+#app.landscape-compact .npkey { padding: calc(4px * var(--kb-scale, 1)) 0; font-size: calc(16px * var(--kb-scale, 1)); display: flex; align-items: center; justify-content: center; }
+#app.landscape-compact .qkey { padding: calc(3px * var(--kb-scale, 1)) 0; font-size: calc(13px * var(--kb-scale, 1)); display: flex; align-items: center; justify-content: center; }
 /* 回転アニメーション中の入力ロック */
 #rotate-lock { position: absolute; inset: 0; z-index: 50; background: transparent; touch-action: none; display: none; }
 #rotate-lock.on { display: block; }
@@ -194,7 +194,7 @@ body {
 .npkey {
   background: var(--bg); color: var(--text);
   border: none; font-family: var(--font);
-  font-size: 18px; padding: 12px 0;
+  font-size: calc(18px * var(--kb-scale, 1)); padding: calc(12px * var(--kb-scale, 1)) 0;
   -webkit-user-select: none; user-select: none;
 }
 .npkey:active { background: var(--border); }
@@ -216,7 +216,7 @@ body {
 .qkey {
   flex: 1; background: var(--bg); color: var(--text);
   border: none; font-family: var(--font);
-  font-size: 14px; padding: 7px 0;
+  font-size: calc(14px * var(--kb-scale, 1)); padding: calc(7px * var(--kb-scale, 1)) 0;
   -webkit-user-select: none; user-select: none;
   text-transform: none;
 }
@@ -227,6 +227,23 @@ body {
 .qkey.accent { background: var(--cyan); color: #fff; font-weight: bold; flex: 1.6; }
 .qkey.shift-on { background: var(--cyan); color: #fff; }
 .qkey.caps-lock { background: var(--orange); color: #fff; }
+
+/* キーボードサイズ調整バー（計算結果列の区切り線と同じ細さ：14px＋小グリップ、サイズ表示なし） */
+#kb-resize-bar {
+  display: none; height: 14px; background: var(--border);
+  cursor: row-resize; flex-shrink: 0; position: relative; z-index: 10;
+  transition: background 0.15s; touch-action: none;
+  align-items: center; justify-content: center;
+}
+#kb-resize-bar.open { display: flex; }
+#kb-resize-bar:hover, #kb-resize-bar.dragging { background: var(--cyan); }
+#kb-resize-bar::after {
+  content: ''; width: 36px; height: 4px; border-radius: 3px;
+  background: rgba(255,255,255,0.25); flex-shrink: 0;
+}
+#kb-resize-bar.side { width: 14px; height: auto; align-self: stretch; cursor: col-resize; }
+#kb-resize-bar.side::after { width: 4px; height: 36px; }
+#kb-resize-bar:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
 
 .lnum { cursor: pointer; }
 .lnum:hover { color: var(--cyan) !important; background: rgba(57,208,216,0.08); }
@@ -279,6 +296,8 @@ body {
 </div><!-- /editor-col -->
 <div id="kb-side"></div>
 </div><!-- /body-area -->
+
+<div id="kb-resize-bar" tabindex="0" role="slider" aria-label="キーボードのサイズ" aria-valuemin="60" aria-valuemax="160" aria-valuenow="100"></div>
 
 <div id="numpad">
   <button class="npkey" data-k="7">7</button>
@@ -399,6 +418,8 @@ const statusKbHidden = document.getElementById('status-kbhidden');
 /* ── 可変パラメータ ── */
 let fontSize    = 14;   // px
 let resultsW    = 130;  // px
+let kbResizing = false;   // キーボードサイズ調整バーのドラッグ中フラグ（結果列の自動拡張抑止用）
+let kbResizeEndAt = 0;    // ドラッグ終了後600msも自動拡張を抑止する期限
 const MIN_FS    = 8;
 const MAX_FS    = 32;
 const PAD_TOP   = 10;
@@ -638,6 +659,7 @@ function render() {
 // （広げるだけで、不要になっても自動では縮めない）
 function avoidResultTruncation(res, resTexts) {
   if (divDragging) return;
+  if (typeof kbResizing !== 'undefined' && (kbResizing || Date.now() < kbResizeEndAt)) return;
   if (!res || !res.length) return;
 
   ctx.font = `${Math.max(9,fontSize-1)}px "JetBrains Mono","Fira Code","Courier New",monospace`;
@@ -1144,6 +1166,7 @@ function insertAtCursor(text) {
 const btnNumpad = document.getElementById('btn-numpad');
 const numpad    = document.getElementById('numpad');
 const qwerty    = document.getElementById('qwerty');
+const kbBar     = document.getElementById('kb-resize-bar');
 const KB_MODES  = ['numpad', 'qwerty', 'normal'];
 const KB_ICON   = { numpad: '🔢', qwerty: '🔤', normal: '⌨️' };
 const KB_TITLE  = {
@@ -1194,6 +1217,35 @@ function handleShiftTap() {
 }
 
 function softwareKbVisible() { return kbMode !== 'normal' && !kbHidden; }
+
+/* ── キーボードサイズ（細いバーのドラッグで変更、60%〜160%、端末に保存） ──
+ * バーは計算結果列の区切り線と同じ14pxの細さで、サイズの数値表示はしない。
+ * 横画面（右列）でバーを動かしても計算結果列の幅には触れず、ドラッグ中と
+ * 終了後600msは結果列の自動拡張も抑止する（avoidResultTruncation側で判定）。 */
+let kbScale = (() => {
+  const n = parseFloat(localStorage.getItem('calcpad-kbscale') ?? '1');
+  return isFinite(n) ? Math.min(1.6, Math.max(0.6, n)) : 1;
+})();
+function saveKbScale() { localStorage.setItem('calcpad-kbscale', String(kbScale)); }
+function applyKbScale() {
+  appEl.style.setProperty('--kb-scale', String(kbScale));
+  if (kbBar) kbBar.setAttribute('aria-valuenow', String(Math.round(kbScale * 100)));
+  if (isSideKb()) {
+    const appW = appEl.clientWidth || window.innerWidth;
+    if (kbMode === 'numpad') {
+      const base = Math.min(320, appW * 0.42);
+      numpad.style.width = Math.min(appW * 0.7, base * kbScale) + 'px';
+      qwerty.style.width = '';
+    } else if (kbMode === 'qwerty') {
+      const base = Math.min(400, appW * 0.52);
+      qwerty.style.width = Math.min(appW * 0.75, base * kbScale) + 'px';
+      numpad.style.width = '';
+    }
+  } else {
+    numpad.style.width = '';
+    qwerty.style.width = '';
+  }
+}
 function isSideKb() { return effShortLandscape() && softwareKbVisible(); }
 function updateKbLayout() {
   const side = isSideKb();
@@ -1206,8 +1258,19 @@ function updateKbLayout() {
       appEl.insertBefore(kb, rotateLockEl);
     }
   }
+  // サイズ調整バー：下部配置ではキーボードの上辺、右列配置では左辺に置く
+  kbBar.classList.toggle('side', side);
+  kbBar.classList.toggle('open', softwareKbVisible());
+  if (side) {
+    if (kbBar.parentElement !== kbSideEl) kbSideEl.insertBefore(kbBar, kbSideEl.firstChild);
+  } else if (kbBar.parentElement !== appEl) {
+    appEl.insertBefore(kbBar, numpad);
+  } else if (numpad.parentElement === appEl && kbBar.nextElementSibling !== numpad) {
+    appEl.insertBefore(kbBar, numpad);
+  }
   numpad.classList.toggle('open', softwareKbVisible() && kbMode === 'numpad');
   qwerty.classList.toggle('open', softwareKbVisible() && kbMode === 'qwerty');
+  applyKbScale();
   btnNumpad.classList.toggle('active', kbMode !== 'normal');
   btnNumpad.textContent = (kbHidden && kbMode !== 'normal') ? '⌨️' : KB_ICON[kbMode];
   btnNumpad.title = (kbHidden && kbMode !== 'normal') ? 'キーボードを表示' : KB_TITLE[kbMode];
@@ -1273,6 +1336,91 @@ function attachKbSwipe(el) {
 }
 attachKbSwipe(numpad);
 attachKbSwipe(qwerty);
+
+/* ── サイズ調整バーのドラッグ／画面端スワイプで非表示 ──
+ * バーを掴んでドラッグするとキーボードの大きさが変わる（下部は上下、右列は左右）。
+ * 最小サイズを大きく超えて画面端方向へドラッグ（オーバーシュート48px超）、
+ * または端方向へ素早くスワイプ（300ms以内に64px超かつ最小超過）した場合は
+ * サイズ変更とは扱わず、ドラッグ開始時のサイズに戻してからキーボードを隠す。
+ * ポインタ座標は画面座標で届くため、表示回転に応じてアプリ内座標へ変換する。 */
+function kbScreenToAppDelta(dx, dy) {
+  switch (viewRotation) {
+    case 90:  return { x: dy,  y: -dx };
+    case 180: return { x: -dx, y: -dy };
+    case 270: return { x: -dy, y: dx };
+    default:  return { x: dx,  y: dy };
+  }
+}
+let kbDrag = null;
+function kbDragState(e) {
+  const d = kbScreenToAppDelta(e.clientX - kbDrag.startX, e.clientY - kbDrag.startY);
+  const relevant = kbDrag.side ? d.x : d.y; // 正＝画面端（非表示）方向
+  const overshoot = relevant - (kbDrag.startScale - 0.6) * kbDrag.baseSize;
+  const elapsed = Date.now() - kbDrag.startTime;
+  return { relevant, overshoot, willHide: overshoot > 48 || (relevant > 64 && elapsed < 300 && overshoot > 0) };
+}
+kbBar.addEventListener('pointerdown', e => {
+  if (!softwareKbVisible()) return;
+  const activeKb = kbMode === 'numpad' ? numpad : qwerty;
+  const rect = activeKb.getBoundingClientRect();
+  const side = isSideKb();
+  const startSize = side ? (oddRotation() ? rect.height : rect.width)
+                         : (oddRotation() ? rect.width : rect.height);
+  if (!startSize) return;
+  kbDrag = {
+    startX: e.clientX, startY: e.clientY, startTime: Date.now(),
+    startScale: kbScale, startSize, baseSize: startSize / kbScale, side,
+  };
+  kbResizing = true;
+  kbBar.classList.add('dragging');
+  try { kbBar.setPointerCapture(e.pointerId); } catch {}
+  kbBar.focus();
+  e.preventDefault();
+});
+kbBar.addEventListener('pointermove', e => {
+  if (!kbDrag) return;
+  const st = kbDragState(e);
+  const newSize = kbDrag.startSize - st.relevant;
+  kbScale = Math.min(1.6, Math.max(0.6, newSize / kbDrag.baseSize));
+  kbResizeEndAt = Date.now() + 600;
+  applyKbScale();
+  render();
+});
+function kbDragEnd(e) {
+  if (!kbDrag) return;
+  const st = e ? kbDragState(e) : { willHide: false };
+  const startScale = kbDrag.startScale;
+  kbDrag = null;
+  kbResizing = false;
+  kbResizeEndAt = Date.now() + 600;
+  kbBar.classList.remove('dragging');
+  if (st.willHide) {
+    kbScale = startScale; // 非表示はサイズ変更として扱わない
+    applyKbScale();
+    saveKbScale();
+    setKbHidden(true);
+  } else {
+    saveKbScale();
+    render();
+  }
+}
+kbBar.addEventListener('pointerup', kbDragEnd);
+kbBar.addEventListener('pointercancel', () => kbDragEnd(null));
+kbBar.addEventListener('keydown', e => {
+  const step = e.shiftKey ? 0.01 : 0.05;
+  let next = null;
+  if (e.key === 'ArrowUp' || e.key === 'ArrowRight') next = kbScale + step;
+  else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') next = kbScale - step;
+  else if (e.key === 'Home') next = 0.6;
+  else if (e.key === 'End') next = 1.6;
+  if (next === null) return;
+  e.preventDefault();
+  kbScale = Math.min(1.6, Math.max(0.6, next));
+  kbResizeEndAt = Date.now() + 600;
+  applyKbScale();
+  saveKbScale();
+  render();
+});
 
 btnNumpad.addEventListener('click', () => {
   if (kbHidden) { setKbHidden(false); ta.focus(); return; }
