@@ -483,33 +483,49 @@ function tokenize(line) {
 /* ── Canvas ── */
 function resizeCanvas() {
   const wrap = document.getElementById('editor-wrap');
-  canvas.width  = wrap.clientWidth;
-  canvas.height = wrap.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width  = Math.round(wrap.clientWidth * dpr);
+  canvas.height = Math.round(wrap.clientHeight * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-/* WebViewのテキスト拡大（フォントブースティング）対策：
- * DOMのテキストは拡大されてもCanvasの測定は拡大されないため、行の右ほど
- * 描画文字がカーソル／選択範囲から累積してずれる。同じフォント・行高の
- * DOMプローブで実効行高を測り、その倍率をCanvasのフォントと縦位置にも
- * 適用して、文字送りをtextareaと一致させる（Space版で実証済みの方式）。 */
-let hlProbe = null;
-function textScaleRatio() {
+/* テキスト拡大（フォントブースティング／テキストオートサイジング）対策：
+ * Chrome／Android WebViewは textarea の文字と行送りだけを拡大することがあり、
+ * 行番号・結果列・Canvas描画が公称の行高のまま取り残されて上下左右にずれる。
+ * 小さなdivプローブでは拡大のクラスタ判定が一致せず測れないため、実物の
+ * textareaと同一スタイル・同一内容・同一幅のクローン（textarea要素）で
+ * 実効行高を実測し、行番号・結果・Canvasのすべてをその実測値に合わせる。 */
+let taProbe = null;
+let effLHCache = { key: '', lh: 0 };
+function effLineHeight() {
+  const LH = lineHeight();
   try {
-    if (!hlProbe) {
-      hlProbe = document.createElement('div');
-      hlProbe.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden;white-space:pre;pointer-events:none;padding:0;margin:0;border:none;';
-      document.body.appendChild(hlProbe);
+    const lineCount = ta.value.split('\n').length;
+    const key = [fontSize, ta.clientWidth, lineCount, ta.value.length].join('|');
+    if (effLHCache.key === key && effLHCache.lh > 0) return effLHCache.lh;
+    let lh = LH;
+    if (lineCount >= 2) {
+      if (!taProbe) {
+        taProbe = document.createElement('textarea');
+        taProbe.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden;white-space:pre;overflow:auto;border:none;resize:none;pointer-events:none;';
+        document.body.appendChild(taProbe);
+      }
+      taProbe.style.font = fontStr();
+      taProbe.style.lineHeight = LH + 'px';
+      taProbe.style.padding = '10px 8px';
+      taProbe.style.width = ta.clientWidth + 'px';
+      taProbe.style.height = '40px';
+      taProbe.value = ta.value;
+      if (taProbe.scrollHeight > 40) {
+        const eff = (taProbe.scrollHeight - 20) / lineCount;
+        if (isFinite(eff) && eff > LH * 0.5 && eff < LH * 3) lh = eff;
+      }
     }
-    const LH = lineHeight();
-    hlProbe.style.font = fontStr();
-    hlProbe.style.lineHeight = LH + 'px';
-    hlProbe.textContent = 'A\nA';
-    const eff = hlProbe.offsetHeight / 2;
-    if (!isFinite(eff) || eff <= 0) return 1;
-    const r = eff / LH;
-    return (r > 0.5 && r < 3) ? r : 1;
-  } catch { return 1; }
+    effLHCache = { key, lh };
+    return lh;
+  } catch { return LH; }
 }
+function textScaleRatio() { return effLineHeight() / lineHeight(); }
 
 function drawHighlight(lines, scrollTop, scrollLeft) {
   const ratio = textScaleRatio();
@@ -518,7 +534,8 @@ function drawHighlight(lines, scrollTop, scrollLeft) {
   ctx.font = `${fontSize * ratio}px "JetBrains Mono","Fira Code","Courier New",monospace`;
   ctx.textBaseline = 'middle';
   const start = Math.floor(scrollTop / LH);
-  const end   = Math.min(lines.length - 1, start + Math.ceil(canvas.height / LH) + 1);
+  const viewH = canvas.height / (window.devicePixelRatio || 1);
+  const end   = Math.min(lines.length - 1, start + Math.ceil(viewH / LH) + 1);
   for (let i = start; i <= end; i++) {
     const y = PAD_TOP + i * LH + LH / 2 - scrollTop;
     let x = PAD_LEFT - scrollLeft;
@@ -623,20 +640,21 @@ function fmtN(n) {
 let curLine = 0;
 
 function applyFontSize() {
-  const LH = lineHeight();
+  const LH = effLineHeight();
+  const ratio = LH / lineHeight();
   ta.style.fontSize    = fontSize + 'px';
-  ta.style.lineHeight  = LH + 'px';
+  ta.style.lineHeight  = lineHeight() + 'px';
   // 行番号フォントサイズ
   document.querySelectorAll('.lnum').forEach(el => {
     el.style.height     = LH + 'px';
     el.style.lineHeight = LH + 'px';
-    el.style.fontSize   = Math.max(9, fontSize - 3) + 'px';
+    el.style.fontSize   = Math.max(9, (fontSize - 3) * ratio) + 'px';
   });
   // 結果列セルも更新
   document.querySelectorAll('.rcell').forEach(el => {
     el.style.height     = LH + 'px';
     el.style.lineHeight = LH + 'px';
-    el.style.fontSize   = Math.max(9, fontSize - 1) + 'px';
+    el.style.fontSize   = Math.max(9, (fontSize - 1) * ratio) + 'px';
   });
 }
 
@@ -647,15 +665,16 @@ function applyResultsWidth() {
 function render() {
   const lines = ta.value.split('\n');
   const res   = evaluate(lines);
-  const LH    = lineHeight();
+  const LH    = effLineHeight();
+  const ratio = LH / lineHeight();
 
   // テキストエリアのフォント・行高を常に同期（カーソルずれ防止）
   ta.style.fontSize   = fontSize + 'px';
-  ta.style.lineHeight = LH + 'px';
+  ta.style.lineHeight = lineHeight() + 'px';
 
-  // 行番号
+  // 行番号（実効行高に合わせる）
   lnums.innerHTML = lines.map((_,i) =>
-    `<div class="lnum${i===curLine?' cur':''}" data-line="${i+1}" style="height:${LH}px;line-height:${LH}px;font-size:${Math.max(9,fontSize-3)}px">${i+1}</div>`
+    `<div class="lnum${i===curLine?' cur':''}" data-line="${i+1}" style="height:${LH}px;line-height:${LH}px;font-size:${Math.max(9,(fontSize-3)*ratio)}px">${i+1}</div>`
   ).join('');
 
   // Canvas
@@ -665,7 +684,7 @@ function render() {
   // 結果
   const resTexts = res.map(r => r.type==='number' ? fmtN(r.value) : (r.type==='error' ? 'ERR' : '·'));
   resultsEl.innerHTML = res.map((r,i) => {
-    const h = `height:${LH}px;line-height:${LH}px;font-size:${Math.max(9,fontSize-1)}px;`;
+    const h = `height:${LH}px;line-height:${LH}px;font-size:${Math.max(9,(fontSize-1)*ratio)}px;`;
     if (r.type==='number') return `<div class="rcell" style="${h}color:var(--result-num)">${resTexts[i]}</div>`;
     if (r.type==='error')  return `<div class="rcell" style="${h}color:var(--red)">ERR</div>`;
     return `<div class="rcell" style="${h}color:transparent">·</div>`;
@@ -1578,7 +1597,7 @@ numpad.addEventListener('click', e => {
 
 /* ── QWERTY英字キーボード ── */
 function scrollCursorIntoView() {
-  const LH = lineHeight();
+  const LH = effLineHeight();
   const line = ta.value.slice(0, ta.selectionStart).split('\n').length - 1;
   const y = line * LH;
   if (y < ta.scrollTop) ta.scrollTop = y;
