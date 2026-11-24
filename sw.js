@@ -2,7 +2,7 @@
 // 実ファイルとして保存することで、blob URL登録の問題（多くのブラウザでService Workerの
 // スクリプトURLにblob:を使えない）を回避し、インストール時にアプリ本体を事前キャッシュする。
 
-const CACHE = 'memo-calc-v8';
+const CACHE = 'memo-calc-v9';
 const SHELL = [
   './',
   './index.html',
