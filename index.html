@@ -181,6 +181,7 @@ body {
 #status-sum { color: var(--cyan); }
 #btn-fs.active { color: var(--cyan); border-color: var(--cyan); background: #0e2f33; }
 #btn-numpad.active { color: var(--cyan); border-color: var(--cyan); }
+#btn-mic.recording { color: #fff; background: var(--red); border-color: var(--red); }
 
 /* テンキー */
 #numpad {
@@ -290,7 +291,9 @@ body {
   <span id="status-pos">行 1</span>
   <span id="status-rot" style="display:none;color:var(--cyan);"></span>
   <span id="status-kbhidden" style="display:none;color:var(--cyan);">キーボード非表示中（エディタをタップで再表示）</span>
+  <span id="status-voice" style="display:none;color:var(--red);">● 音声入力中</span>
   <button class="hbtn" id="btn-dispmode" title="表示形式切替" style="margin-left:auto;padding:2px 8px;font-size:12px;font-family:var(--font);min-width:48px;text-align:center;">小数</button>
+  <button class="hbtn" id="btn-mic" title="音声入力（OS標準）" style="padding:2px 8px;font-size:12px;">🎤</button>
   <button class="hbtn" id="btn-numpad" title="テンキー切替" style="padding:2px 8px;font-size:12px;">🔢</button>
 </div>
 </div><!-- /editor-col -->
@@ -484,10 +487,35 @@ function resizeCanvas() {
   canvas.height = wrap.clientHeight;
 }
 
+/* WebViewのテキスト拡大（フォントブースティング）対策：
+ * DOMのテキストは拡大されてもCanvasの測定は拡大されないため、行の右ほど
+ * 描画文字がカーソル／選択範囲から累積してずれる。同じフォント・行高の
+ * DOMプローブで実効行高を測り、その倍率をCanvasのフォントと縦位置にも
+ * 適用して、文字送りをtextareaと一致させる（Space版で実証済みの方式）。 */
+let hlProbe = null;
+function textScaleRatio() {
+  try {
+    if (!hlProbe) {
+      hlProbe = document.createElement('div');
+      hlProbe.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden;white-space:pre;pointer-events:none;padding:0;margin:0;border:none;';
+      document.body.appendChild(hlProbe);
+    }
+    const LH = lineHeight();
+    hlProbe.style.font = fontStr();
+    hlProbe.style.lineHeight = LH + 'px';
+    hlProbe.textContent = 'A\nA';
+    const eff = hlProbe.offsetHeight / 2;
+    if (!isFinite(eff) || eff <= 0) return 1;
+    const r = eff / LH;
+    return (r > 0.5 && r < 3) ? r : 1;
+  } catch { return 1; }
+}
+
 function drawHighlight(lines, scrollTop, scrollLeft) {
-  const LH = lineHeight();
+  const ratio = textScaleRatio();
+  const LH = lineHeight() * ratio;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.font = fontStr();
+  ctx.font = `${fontSize * ratio}px "JetBrains Mono","Fira Code","Courier New",monospace`;
   ctx.textBaseline = 'middle';
   const start = Math.floor(scrollTop / LH);
   const end   = Math.min(lines.length - 1, start + Math.ceil(canvas.height / LH) + 1);
@@ -1427,6 +1455,68 @@ btnNumpad.addEventListener('click', () => {
   const idx = KB_MODES.indexOf(kbMode);
   setKbMode(KB_MODES[(idx + 1) % KB_MODES.length]);
 });
+
+/* ── 音声入力（OS標準：Web Speech API／Androidアプリ版ではネイティブ橋渡し） ──
+ * 走り書きメモと同じ方式：APIキー不要。認識した文章はカーソル位置に挿入され、
+ * 話し終わると自動終了、もう一度押しても終了できる。言語は端末に保存され、
+ * 既定は日本語（ja-JP）。Androidアプリ版では window.MemoCalcAndroid が
+ * SpeechRecognizerへ橋渡しし、結果は __onNativeSpeechResult 等で返る。 */
+const btnMic = document.getElementById('btn-mic');
+const statusVoice = document.getElementById('status-voice');
+let voiceLang = localStorage.getItem('calcpad-voice-lang') || 'ja-JP';
+let recog = null;
+let voiceActive = false;
+function setVoiceUI(on) {
+  voiceActive = on;
+  btnMic.textContent = on ? '⏹' : '🎤';
+  btnMic.classList.toggle('recording', on);
+  if (statusVoice) statusVoice.style.display = on ? '' : 'none';
+}
+window.__onNativeSpeechResult = text => { if (text) insertAtCursor(text); };
+window.__onNativeSpeechError = msg => { if (msg) alert(msg); };
+window.__onNativeSpeechEnd = () => setVoiceUI(false);
+btnMic.addEventListener('click', () => {
+  if (voiceActive) {
+    if (window.MemoCalcAndroid) { try { window.MemoCalcAndroid.stopSpeech(); } catch {} }
+    if (recog) { try { recog.stop(); } catch {} }
+    setVoiceUI(false);
+    return;
+  }
+  if (window.MemoCalcAndroid) {
+    setVoiceUI(true);
+    try { window.MemoCalcAndroid.startSpeech(voiceLang); }
+    catch { setVoiceUI(false); alert('音声認識を開始できませんでした。'); }
+    return;
+  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    alert('このブラウザは音声認識に対応していません。Chrome / Edge / Safari でお試しいただくか、キーボードのマイクボタンから入力してください。');
+    return;
+  }
+  recog = new SR();
+  recog.lang = voiceLang;
+  recog.interimResults = false;
+  recog.continuous = false;
+  recog.maxAlternatives = 1;
+  recog.onresult = e => {
+    let txt = '';
+    for (const r of e.results) if (r.isFinal) txt += r[0].transcript;
+    txt = txt.trim();
+    if (txt) insertAtCursor(txt);
+  };
+  recog.onerror = e => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      alert('マイクを使えませんでした。ブラウザのマイク許可を確認してください。');
+    } else if (e.error !== 'aborted' && e.error !== 'no-speech') {
+      alert('音声認識でエラーが発生しました。');
+    }
+    setVoiceUI(false);
+  };
+  recog.onend = () => setVoiceUI(false);
+  setVoiceUI(true);
+  try { recog.start(); }
+  catch { setVoiceUI(false); alert('音声認識を開始できませんでした。'); }
+});
 applyAppBox();
 setKbMode('numpad');
 updateKbLayout();
@@ -1735,6 +1825,10 @@ redoStack = [];
 updateUndoRedoBtns();
 
 applyResultsWidth();
+if (document.fonts) {
+  if (document.fonts.ready) document.fonts.ready.then(() => render()).catch(() => {});
+  if (document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', () => render());
+}
 ta.style.fontSize   = fontSize + 'px';
 ta.style.lineHeight = lineHeight() + 'px';
 resizeCanvas();

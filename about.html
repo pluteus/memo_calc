@@ -591,7 +591,8 @@
       <div class="feature-card">
         <div class="feature-icon">⌨️</div>
         <h3>3モード切替キーボード</h3>
-        <p>テンキー → QWERTY → OS標準の順で切り替えられる専用キーボード。Shiftのシングルタップ／ダブルタップ（CapsLock）にも対応しています。ソフトウェアキーボードは下方向へスワイプすると隠すことができ、キーボードが右側の列に表示されているときは右方向へスワイプしても隠すことができます。エディタをタップするか、下部のキーボードボタンで再表示できます。端末を横向きにすると、キーボードが右側の列に配置されてエディタの高さが確保されます。キーボードの上辺（右側の列に表示されているときは左辺）にある細いバーをドラッグするとキーボードの大きさを変更でき、そのバーを画面端へスワイプするとキーボードを隠せます。大きさは端末に保存されます。</p>
+        <p>テンキー → QWERTY → OS標準の順で切り替えられる専用キーボード。Shiftのシングルタップ／ダブルタップ（CapsLock）にも対応しています。ソフトウェアキーボードは下方向へスワイプすると隠すことができ、キーボードが右側の列に表示されているときは右方向へスワイプしても隠すことができます。エディタをタップするか、下部のキーボードボタンで再表示できます。端末を横向きにすると、キーボードが右側の列に配置されてエディタの高さが確保されます。キーボードの上辺（右側の列に表示されているときは左辺）にある細いバーをドラッグするとキーボードの大きさを変更でき、そのバーを画面端へスワイプするとキーボードを隠せます。大きさは端末に保存されます。また、フッターの🎤ボタンからOS標準の音声入力も使えます（APIキー不要）。押して話すと認識した文章がカーソル位置に入り、話し終わると自動で終了します。認識言語は下のセレクタで変更でき、端末に保存されます。</p>
+        <p style="margin-top:10px;"><label>音声認識の言語： <select id="voice-lang" onchange="localStorage.setItem('calcpad-voice-lang', this.value)"><option value="ja-JP">日本語</option><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option><option value="zh-CN">中文（简体）</option><option value="zh-TW">中文（繁體）</option><option value="ko-KR">한국어</option><option value="fr-FR">Français</option><option value="de-DE">Deutsch</option><option value="es-ES">Español</option><option value="it-IT">Italiano</option><option value="pt-BR">Português</option><option value="ru-RU">Русский</option></select></label></p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">⟳</div>
@@ -837,5 +838,6 @@ function toggleTheme() {
   }
 })();
 </script>
+<script>(function(){var sel=document.getElementById('voice-lang');if(sel){sel.value=localStorage.getItem('calcpad-voice-lang')||'ja-JP';}})();</script>
 </body>
 </html>
