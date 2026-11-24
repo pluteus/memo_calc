@@ -490,12 +490,12 @@ function resizeCanvas() {
 }
 
 /* テキスト拡大（フォントブースティング／テキストオートサイジング）対策：
- * Chrome／Android WebViewは textarea の文字と行送りだけを拡大することがあり、
+ * Chrome／Android WebViewは textarea の文字と行送りを拡大することがあり、
  * 行番号・結果列・Canvas描画が公称の行高のまま取り残されて上下左右にずれる。
- * 小さなdivプローブでは拡大のクラスタ判定が一致せず測れないため、実物の
- * textareaと同一スタイル・同一内容・同一幅のクローン（textarea要素）で
- * 実効行高を実測し、行番号・結果・Canvasのすべてをその実測値に合わせる。 */
-let taProbe = null;
+ * 別要素のプローブでは拡大率が実物と一致しない（クローン測定で約3倍の誤検出を
+ * 実機で確認済み）ため、実物の textarea 自身の高さを一時的に小さくして
+ * scrollHeight を読み、実効行高を直接測る。行番号・結果・Canvasのすべてを
+ * この実測値に合わせ、測定値が公称の0.8〜2倍を外れたら誤検出として使わない。 */
 let effLHCache = { key: '', lh: 0 };
 function effLineHeight() {
   const LH = lineHeight();
@@ -504,21 +504,14 @@ function effLineHeight() {
     const key = [fontSize, ta.clientWidth, lineCount, ta.value.length].join('|');
     if (effLHCache.key === key && effLHCache.lh > 0) return effLHCache.lh;
     let lh = LH;
-    if (lineCount >= 2) {
-      if (!taProbe) {
-        taProbe = document.createElement('textarea');
-        taProbe.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden;white-space:pre;overflow:auto;border:none;resize:none;pointer-events:none;';
-        document.body.appendChild(taProbe);
-      }
-      taProbe.style.font = fontStr();
-      taProbe.style.lineHeight = LH + 'px';
-      taProbe.style.padding = '10px 8px';
-      taProbe.style.width = ta.clientWidth + 'px';
-      taProbe.style.height = '40px';
-      taProbe.value = ta.value;
-      if (taProbe.scrollHeight > 40) {
-        const eff = (taProbe.scrollHeight - 20) / lineCount;
-        if (isFinite(eff) && eff > LH * 0.5 && eff < LH * 3) lh = eff;
+    if (lineCount >= 2 && ta.clientWidth > 0) {
+      const prevH = ta.style.height;
+      ta.style.height = '40px';
+      const sh = ta.scrollHeight;
+      ta.style.height = prevH;
+      if (sh > 40) {
+        const eff = (sh - 20) / lineCount;
+        if (isFinite(eff) && eff > LH * 0.8 && eff < LH * 2) lh = eff;
       }
     }
     effLHCache = { key, lh };
