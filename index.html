@@ -289,7 +289,7 @@ body {
 <div id="footer">
   <span>合計: <span id="status-sum">—</span></span>
   <span id="status-pos">行 1</span>
-  <span id="status-ver" style="opacity:.55;">v9</span>
+  <span id="status-ver" style="opacity:.55;">v10</span>
   <span id="status-rot" style="display:none;color:var(--cyan);"></span>
   <span id="status-kbhidden" style="display:none;color:var(--cyan);">キーボード非表示中（エディタをタップで再表示）</span>
   <span id="status-voice" style="display:none;color:var(--red);">● 音声入力中</span>
@@ -498,6 +498,7 @@ function resizeCanvas() {
  * scrollHeight を読み、実効行高を直接測る。行番号・結果・Canvasのすべてを
  * この実測値に合わせ、測定値が公称の0.8〜2倍を外れたら誤検出として使わない。 */
 let effLHCache = { key: '', lh: 0 };
+let lastSh = 0, lastLc = 0;
 function effLineHeight() {
   const LH = lineHeight();
   try {
@@ -510,6 +511,7 @@ function effLineHeight() {
       ta.style.height = '40px';
       const sh = ta.scrollHeight;
       ta.style.height = prevH;
+      lastSh = sh; lastLc = lineCount;
       if (sh > 40) {
         const eff = (sh - 20) / lineCount;
         if (isFinite(eff) && eff > LH * 0.8 && eff < LH * 2) lh = eff;
@@ -523,6 +525,8 @@ function textScaleRatio() { return effLineHeight() / lineHeight(); }
 
 function drawHighlight(lines, scrollTop, scrollLeft) {
   const ratio = textScaleRatio();
+  const verEl = document.getElementById('status-ver');
+  if (verEl) verEl.textContent = `v10 r=${ratio.toFixed(2)} d=${window.devicePixelRatio || 1} sh=${lastSh} lc=${lastLc}`;
   const LH = lineHeight() * ratio;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.font = `${fontSize * ratio}px "JetBrains Mono","Fira Code","Courier New",monospace`;
