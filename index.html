@@ -484,10 +484,13 @@ function tokenize(line) {
 /* ── Canvas ── */
 function resizeCanvas() {
   const wrap = document.getElementById('editor-wrap');
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width  = Math.round(wrap.clientWidth * dpr);
-  canvas.height = Math.round(wrap.clientHeight * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  /* Canvas は CSS ピクセル寸法のまま描画する（DPR 拡大はしない）。
+   * Android Chrome/WebView では DPR 変換とブラウザ側の表示スケーリングが
+   * 二重にかかり文字だけ巨大化する事象が実機で確認されたため、
+   * 実機で正常だったスペース版と同じ素の寸法で描く。 */
+  canvas.width  = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
 /* テキスト拡大（フォントブースティング／テキストオートサイジング）対策：
@@ -526,13 +529,13 @@ function textScaleRatio() { return effLineHeight() / lineHeight(); }
 function drawHighlight(lines, scrollTop, scrollLeft) {
   const ratio = textScaleRatio();
   const verEl = document.getElementById('status-ver');
-  if (verEl) verEl.textContent = `v10 r=${ratio.toFixed(2)} d=${window.devicePixelRatio || 1} sh=${lastSh} lc=${lastLc}`;
+  if (verEl) verEl.textContent = `v11 r=${ratio.toFixed(2)} d=${window.devicePixelRatio || 1} sh=${lastSh} lc=${lastLc}`;
   const LH = lineHeight() * ratio;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.font = `${fontSize * ratio}px "JetBrains Mono","Fira Code","Courier New",monospace`;
   ctx.textBaseline = 'middle';
   const start = Math.floor(scrollTop / LH);
-  const viewH = canvas.height / (window.devicePixelRatio || 1);
+  const viewH = canvas.height;
   const end   = Math.min(lines.length - 1, start + Math.ceil(viewH / LH) + 1);
   for (let i = start; i <= end; i++) {
     const y = PAD_TOP + i * LH + LH / 2 - scrollTop;
