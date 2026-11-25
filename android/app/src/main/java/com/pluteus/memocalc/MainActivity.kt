@@ -113,6 +113,10 @@ class MainActivity : AppCompatActivity() {
             domStorageEnabled = true
             mediaPlaybackRequiresUserGesture = false
             setSupportZoom(false)
+            // WebView 側の自動テキスト拡大（端末のフォント倍率等の影響）を止める。
+            // これが効いていると textarea の文字と行送りだけが拡大し、
+            // 行番号・結果・Canvas 描画と累積的にずれる（実機で m=1.50 を確認）。
+            textZoom = 100
         }
         webView.addJavascriptInterface(SpeechBridge(), "MemoCalcAndroid")
         webView.loadUrl("https://appassets.androidplatform.net/assets/web/index.html")
