@@ -23,6 +23,7 @@
 </script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
+html { -webkit-text-size-adjust: none; text-size-adjust: none; }
 :root {
   --bg: #0f1117; --surface: #161b22; --border: #2a2f3a;
   --text: #e6edf3; --dim: #5a6373;
@@ -493,43 +494,42 @@ function resizeCanvas() {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
-/* テキスト拡大（フォントブースティング／テキストオートサイジング）対策：
- * Chrome／Android WebViewは textarea の文字と行送りを拡大することがあり、
- * 行番号・結果列・Canvas描画が公称の行高のまま取り残されて上下左右にずれる。
- * 別要素のプローブでは拡大率が実物と一致しない（クローン測定で約3倍の誤検出を
- * 実機で確認済み）ため、実物の textarea 自身の高さを一時的に小さくして
- * scrollHeight を読み、実効行高を直接測る。行番号・結果・Canvasのすべてを
- * この実測値に合わせ、測定値が公称の0.8〜2倍を外れたら誤検出として使わない。 */
-let effLHCache = { key: '', lh: 0 };
+/* テキスト拡大（フォントブースティング）対策は、CSS の text-size-adjust: none で
+ * ブラウザ側の自動拡大そのものを止める方式に変更（v12）。
+ * 以前使った scrollHeight 実測による行高補正は、実測値に環境ごとの幻の誤差
+ * （Android で -2px/行、Windows Edge で +2px/行）が乗り、行数が増えるほど
+ * 累積ズレになることが診断表示つき v10〜v11 の実機確認で判明したため、
+ * レイアウトには使わない。実測は診断表示（フッターの m=）専用に残す。 */
 let lastSh = 0, lastLc = 0;
-function effLineHeight() {
+let diagCache = { key: '', r: 1 };
+function measuredRatio() {
   const LH = lineHeight();
   try {
     const lineCount = ta.value.split('\n').length;
     const key = [fontSize, ta.clientWidth, lineCount, ta.value.length].join('|');
-    if (effLHCache.key === key && effLHCache.lh > 0) return effLHCache.lh;
-    let lh = LH;
+    if (diagCache.key === key) return diagCache.r;
+    let r = 1;
+    lastLc = lineCount;
     if (lineCount >= 2 && ta.clientWidth > 0) {
       const prevH = ta.style.height;
       ta.style.height = '40px';
       const sh = ta.scrollHeight;
       ta.style.height = prevH;
-      lastSh = sh; lastLc = lineCount;
+      lastSh = sh;
       if (sh > 40) {
         const eff = (sh - 20) / lineCount;
-        if (isFinite(eff) && eff > LH * 0.8 && eff < LH * 2) lh = eff;
+        if (isFinite(eff) && eff > 0) r = eff / LH;
       }
     }
-    effLHCache = { key, lh };
-    return lh;
-  } catch { return LH; }
+    diagCache = { key, r };
+    return r;
+  } catch { return 1; }
 }
-function textScaleRatio() { return effLineHeight() / lineHeight(); }
 
 function drawHighlight(lines, scrollTop, scrollLeft) {
-  const ratio = textScaleRatio();
+  const ratio = 1;
   const verEl = document.getElementById('status-ver');
-  if (verEl) verEl.textContent = `v11 r=${ratio.toFixed(2)} d=${window.devicePixelRatio || 1} sh=${lastSh} lc=${lastLc}`;
+  if (verEl) verEl.textContent = `v12 r=1.00 m=${measuredRatio().toFixed(2)} d=${window.devicePixelRatio || 1} sh=${lastSh} lc=${lastLc}`;
   const LH = lineHeight() * ratio;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.font = `${fontSize * ratio}px "JetBrains Mono","Fira Code","Courier New",monospace`;
@@ -641,8 +641,8 @@ function fmtN(n) {
 let curLine = 0;
 
 function applyFontSize() {
-  const LH = effLineHeight();
-  const ratio = LH / lineHeight();
+  const LH = lineHeight();
+  const ratio = 1;
   ta.style.fontSize    = fontSize + 'px';
   ta.style.lineHeight  = lineHeight() + 'px';
   // 行番号フォントサイズ
@@ -666,8 +666,8 @@ function applyResultsWidth() {
 function render() {
   const lines = ta.value.split('\n');
   const res   = evaluate(lines);
-  const LH    = effLineHeight();
-  const ratio = LH / lineHeight();
+  const LH    = lineHeight();
+  const ratio = 1;
 
   // テキストエリアのフォント・行高を常に同期（カーソルずれ防止）
   ta.style.fontSize   = fontSize + 'px';
@@ -1598,7 +1598,7 @@ numpad.addEventListener('click', e => {
 
 /* ── QWERTY英字キーボード ── */
 function scrollCursorIntoView() {
-  const LH = effLineHeight();
+  const LH = lineHeight();
   const line = ta.value.slice(0, ta.selectionStart).split('\n').length - 1;
   const y = line * LH;
   if (y < ta.scrollTop) ta.scrollTop = y;
